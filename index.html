@@ -70,6 +70,12 @@ h3{font-family:var(--label);font-weight:700;font-size:13px;letter-spacing:.12em;
 .themesw{display:flex;width:max-content;margin:28px auto 0;background:var(--sunk);border-radius:999px;padding:3px;gap:2px}
 .themesw button{border:0;background:none;color:var(--muted);font-size:13px;font-weight:600;padding:5px 14px;border-radius:999px}
 .themesw button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.invite{margin-top:10px}
+.invite h2{margin:4px 0 12px}
+.invite .iv-k{margin:14px 0 0;font-family:var(--label);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.iv-ev{display:grid;gap:4px;margin:0 0 14px;padding:12px 14px;border-left:4px solid var(--red);background:var(--surface);border-radius:0 12px 12px 0;color:var(--muted);font-size:14px}
+.iv-ev b{color:var(--ink);font-size:17px}.iv-ev i{font-style:normal;font-weight:600}.iv-ev i.r{color:var(--red)}.iv-ev i.b{color:var(--blue)}
+.invite .btn{width:100%}
 .linkbtn{background:none;border:0;color:var(--muted);font-size:13px;text-decoration:underline;padding:4px}
 label.f{display:grid;gap:4px;font-family:var(--label);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 input[type=text],input[type=password],input[type=datetime-local],textarea,select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 11px;font-family:var(--body);font-size:16px;letter-spacing:0;text-transform:none;color:var(--ink)}
@@ -292,7 +298,7 @@ function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeou
 
 let sb=null;
 const S={
-  ready:false, err:null, view:'home', tab:'score', uid:null,
+  ready:false, err:null, view:'home', invite:null, tab:'score', uid:null,
   nick:ls.get('fg_nick',''), events:[],
   party:null, members:[], cards:{}, online:new Set(), channel:null,
   sel:ls.get('fg_sel',null), expand:null, confirmLeave:false,
@@ -352,6 +358,27 @@ function genCode(){const ch='ABCDEFGHJKLMNPQRSTUVWXYZ';let c='';const a=new Uint
 /* ---------- data ---------- */
 async function loadEvents(){const {data,error}=await sb.from('events').select('*').order('starts_at');
   if(!error&&data)S.events=[...data,...S.events.filter(e=>e.is_custom&&!data.some(x=>x.id===e.id))]}
+async function loadInvite(code){
+  const {data:p}=await sb.from('parties').select('*').eq('code',code).maybeSingle();
+  if(!p||p.solo){S.invite={code,missing:true};return}
+  const ev=evById(p.event_id)||await fetchCard(p.event_id);
+  const {data:ms}=await sb.from('party_members').select('user_id,nickname').eq('party_code',code);
+  const host=(ms||[]).find(m=>m.user_id===p.host);
+  S.invite={code,party:p,ev,host:host?host.nickname:'',count:(ms||[]).length}}
+function vInvite(){const iv=S.invite||{};
+  if(iv.missing)return `<div class="invite"><h2>That invite isn’t working</h2>
+    <div class="panel"><p style="margin:0">There’s no party with the code <b class="code">${esc(iv.code||'')}</b>. Check the link or the code with whoever sent it.</p>
+    <button class="btn" type="button" data-act="inviteHome">Go to the home screen</button></div></div>`;
+  const ev=iv.ev,bt=ev&&(ev.bouts||[])[0];
+  return `<div class="invite"><p class="iv-k">You’re invited</p>
+    <h2>${iv.host?esc(iv.host)+' has invited you to a party':'You’ve been invited to a party'}</h2>
+    <div class="iv-ev">${ev?`<b>${esc(ev.name)}</b>${bt?`<span><i class="r">${esc(bt.red)}</i> v <i class="b">${esc(bt.blue)}</i></span>`:''}${ev.starts_at&&!ev.is_custom?`<span>${esc(fmtDate(ev.starts_at))}</span>`:''}`:''}
+      <span>${iv.count===1?'1 person':iv.count+' people'} in the party · code <b class="code">${esc(iv.code)}</b></span></div>
+    <form class="panel" id="inviteForm" autocomplete="off"><label class="f" for="inviteNick">Your name</label>
+      <input type="text" id="inviteNick" maxlength="30" autocomplete="nickname" enterkeyhint="go" placeholder="e.g. Sarah" value="${esc(S.nick)}">
+      <button class="btn red" type="submit">Join party</button>
+      <p class="small muted" style="margin:0">This is how you’ll appear to everyone in the party.</p></form>
+    <p style="text-align:center;margin-top:18px"><button class="linkbtn" type="button" data-act="inviteHome">Not now, go to the home screen</button></p></div>`}
 async function fetchCard(id){const {data}=await sb.from('events').select('*').eq('id',id).maybeSingle();
   if(data){const i=S.events.findIndex(e=>e.id===id);if(i>=0)S.events[i]=data;else S.events.push(data)}return data}
 async function loadMembers(){if(!S.party)return;const code=S.party.code;const {data}=await sb.from('party_members').select('user_id,nickname,joined_at').eq('party_code',code).order('joined_at');
@@ -687,21 +714,19 @@ function vHostPanel(){const p=S.party;const others=S.members.filter(m=>m.user_id
   <p class="small muted" style="margin:6px 0 0">Removed people can’t rejoin this party.</p></div></div>`}
 
 function vScore(ev){const f=findBout(S.sel);if(!f||f.ev.id!==ev.id)return `<div class="empty" style="margin-top:14px"><strong>No bouts on this card yet</strong>Check back once the card is announced.</div>`;
-  const {bt,key}=f;const {r,d,e}=myCard(key);const t=totals(r,d);const cards=partyCards(key);const rs=roundStats(cards,bt.rounds);const showCrowd=!S.party.solo;
-  const maxR=e?Math.min(e.rd,bt.rounds):bt.rounds;
+  const {bt,key}=f;const {r,d,e}=myCard(key);const t=totals(r,d);const maxR=e?Math.min(e.rd,bt.rounds):bt.rounds;
   let h=`<div class="sub" style="margin-top:14px">${[bt.weight?esc(bt.weight):'',bt.title?'<span class="belt">★ Title fight</span>':'',bt.rounds+' rounds'].filter(Boolean).join(' · ')}</div>
   <div class="fighters"><div class="corner red"><div class="tag">Red corner</div><div class="nm">${esc(bt.red)}</div></div>
   <div class="tot">${t.a}–${t.b}<small>${t.n}/${maxR} RDS${t.pa||t.pb?' · PTS OFF':''}${e?' · STOPPED':''}</small></div>
   <div class="corner blue"><div class="tag">Blue corner</div><div class="nm">${esc(bt.blue)}</div></div></div>
   <div class="card"><div class="card-h"><span>Rd</span><span style="color:var(--red)">${esc(lastN(bt.red))}</span><span style="color:var(--blue)">${esc(lastN(bt.blue))}</span></div>`;
-  for(let i=0;i<maxR;i++){const x=Array.isArray(r[i])?r[i]:[null,null];const s=rs[i];
+  for(let i=0;i<maxR;i++){const x=Array.isArray(r[i])?r[i]:[null,null];
     const dr=d.filter(p=>p.rd===i&&p.c==='r').length,db=d.filter(p=>p.rd===i&&p.c==='b').length;
     const side=(c,val,nm)=>{const low=typeof val==='number'&&val<=7;
       return `<div class="side" role="group" aria-label="Round ${i+1}, ${esc(nm)}">${PTS.map(v=>{const on=val===v;
         return `<button type="button" class="pt ${c}${on?' on':''}" aria-pressed="${on}" data-act="score" data-i="${i}" data-c="${c}" data-v="${v}">${v}</button>`}).join('')}<select class="pt low ${c}${low?' on':''}" id="low-${c}-${i}" data-i="${i}" data-c="${c}" aria-label="Round ${i+1}, ${esc(nm)}, 7 or lower"><option value=""${low?'':' selected'}>7↓</option>${LOW.map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}</select></div>`};
     h+=`<div class="rd"><div class="n">RD<b>${i+1}</b></div>${side('r',x[0],bt.red)}${side('b',x[1],bt.blue)}
-      <div class="rd-foot"><span class="dednote">${dr?`<span class="r">${esc(lastN(bt.red))} −${dr}</span>`:''}${db?`<span class="b">${esc(lastN(bt.blue))} −${db}</span>`:''}${(x[0]==null)!==(x[1]==null)?'<span>Half scored</span>':''}</span>
-      ${showCrowd?`<span class="crowd">${barHTML(s)}<span>${s.n||''}</span></span>`:''}</div></div>`}
+      ${dr||db||(x[0]==null)!==(x[1]==null)?`<div class="rd-foot"><span class="dednote">${dr?`<span class="r">${esc(lastN(bt.red))} −${dr}</span>`:''}${db?`<span class="b">${esc(lastN(bt.blue))} −${db}</span>`:''}${(x[0]==null)!==(x[1]==null)?'<span>Half scored</span>':''}</span></div>`:''}</div>`}
   const lead=e?(e.w==='nc'?'e':e.w):winner(t);
   const vtext=e?esc(endText(e,bt))
     :(!t.n?'No rounds scored':(lead==='r'?esc(bt.red)+' ':lead==='b'?esc(bt.blue)+' ':'')+(t.n>=bt.rounds?(lead==='e'?'Draw':'wins'):(lead==='e'?'Level':'leads'))+' '+t.a+'–'+t.b);
@@ -722,7 +747,7 @@ function vScore(ev){const f=findBout(S.sel);if(!f||f.ev.id!==ev.id)return `<div 
    :`<p class="small muted" style="margin:0 12px 10px">Knockout, stoppage, submission or DQ? Tap who won, then choose how.</p>
      <div class="dedform"><button type="button" class="btn ghost dr" data-act="endPick" data-w="r">${esc(lastN(bt.red))} won</button><button type="button" class="btn ghost db" data-act="endPick" data-w="b">${esc(lastN(bt.blue))} won</button>
      <button type="button" class="btn ghost" data-act="endNC" style="grid-column:1 / -1">No contest</button></div>`}</div>
-  <p class="small muted">Pick a score for each fighter. Choosing below 10 for one fills 10 for the other. Tap a score again to clear it.${showCrowd?' The bar under each round shows how your party scored it.':''}</p>`;
+  <p class="small muted">Pick a score for each fighter. Choosing below 10 for one fills 10 for the other. Tap a score again to clear it.${S.party.solo?'':' To see how your party scored each round, open Party stats.'}</p>`;
   return h}
 
 function cellClass(x){return x[0]>x[1]?'cr':x[1]>x[0]?'cb':'ce'}
@@ -837,6 +862,7 @@ function render(){
   else if(S.err)html=`<div class="note err" style="margin-top:12px">${esc(S.err)}</div>`;
   else if(!S.ready)html='';
   else if(S.view==='admin')html=vAdmin();
+  else if(S.view==='invite'&&S.invite)html=vInvite();
   else if(S.view==='party'&&S.party)html=vParty();
   else html=vHome();
   v.innerHTML=html;window.scrollTo(0,y);
@@ -864,6 +890,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   switch(a){
     case 'home': if(S.party){S.view='party'}else{S.view='home';await loadEvents()}render();break;
     case 'start': case 'solo': {const p=$('#evPick');if(!p)return;t.disabled=true;await createParty(p.value,a==='solo',{chatOff:!!($('#optChatOff')||{}).checked,big:!!($('#optBig')||{}).checked});t.disabled=false;break}
+    case 'inviteHome': S.view='home';S.invite=null;try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}render();window.scrollTo(0,0);break;
     case 'rejoin': {const c=ls.get('fg_party',null);if(c)await enterParty(c);break}
     case 'pick': S.sel=t.dataset.key;ls.set('fg_sel',S.sel);S.expand=null;render();if(S.tab==='global')loadGlobal(S.sel);break;
     case 'score': setScore(+t.dataset.i,t.dataset.c,+t.dataset.v,true);break;
@@ -917,6 +944,10 @@ document.addEventListener('change',e=>{const t=e.target;
   else if(t.classList&&t.classList.contains('low')){setScore(+t.dataset.i,t.dataset.c,t.value===''?null:+t.value,false);t.blur()}});
 document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target;
   if(f.id==='chatForm'){const i=$('#chatIn');const v=i.value;if(!v.trim())return;i.value='';if(!(await sendChat('text',v)))i.value=v;return}
+  if(f.id==='inviteForm'){const i=$('#inviteNick');const n=(i.value||'').trim().slice(0,30);if(!n){toast('Add your name first');i.focus();return}
+    S.nick=n;ls.set('fg_nick',n);const b=f.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='Joining…'}
+    if(await enterParty(S.invite.code)){S.invite=null;return}
+    if(b){b.disabled=false;b.textContent='Join party'}S.view='invite';render();return}
   if(f.id==='joinForm'){const c=($('#joinCode').value||'').toUpperCase().replace(/[^A-Z]/g,'');await enterParty(c)}
   else if(f.id==='adminLogin'){await checkAdmin($('#adminPw').value,false);render()}
   else if(f.id==='evForm')await saveEvent();
@@ -953,7 +984,8 @@ async function init(){render();if(!configured)return;
   catch(err){S.err='Couldn’t reach the database. Check the URL and key in CONFIG.';render();return}
   await loadEvents();S.ready=true;
   const m=/^#join-([A-Za-z]{6})$/.exec(location.hash);
-  if(m){S.joinPrefill=m[1].toUpperCase();if(S.nick){if(await enterParty(S.joinPrefill))return}}
+  if(m){S.joinPrefill=m[1].toUpperCase();if(S.nick){if(await enterParty(S.joinPrefill))return}
+    else{await loadInvite(S.joinPrefill);S.view='invite'}}
   else{const rj=ls.get('fg_party',null);if(rj&&S.nick){if(await enterParty(rj,true))return}}
   render()}
 init();
