@@ -663,14 +663,14 @@ async function saveCustomCard(id){const name=($('#cName').value||'').trim().slic
   const {error}=await sb.from('events').insert(ev);if(error){toast('Couldn’t create the card: '+error.message);return null}
   S.events.push(ev);return ev}
 /* ---------- transition splash while a party loads ----------
-   Shown only if the wait passes 350ms, then kept up for at least 500ms so it never flickers.
+   Shown straight away when you tap, and kept up for at least 1 second so it reads as a transition, not a flash.
    Nested calls (e.g. a watch-along that first makes your solo party) share one splash: the outermost message wins. */
 const BUSY={depth:0,timer:null,shownAt:0};
 async function busy(msg,fn){const el=$('#tsplash');BUSY.depth++;
-  if(BUSY.depth===1&&msg&&el){clearTimeout(BUSY.timer);BUSY.timer=setTimeout(()=>{BUSY.timer=null;$('#tsMsg').textContent=msg;el.hidden=false;void el.offsetWidth;el.classList.remove('out');BUSY.shownAt=Date.now()},350)}
+  if(BUSY.depth===1&&msg&&el){clearTimeout(BUSY.timer);BUSY.timer=null;$('#tsMsg').textContent=msg;el.hidden=false;void el.offsetWidth;el.classList.remove('out');BUSY.shownAt=Date.now()}
   try{return await fn()}finally{BUSY.depth--;
     if(!BUSY.depth&&el){clearTimeout(BUSY.timer);BUSY.timer=null;
-      if(!el.hidden&&!el.classList.contains('out')){const wait=500-(Date.now()-BUSY.shownAt);if(wait>0)await new Promise(r=>setTimeout(r,wait));
+      if(!el.hidden&&!el.classList.contains('out')){const wait=1000-(Date.now()-BUSY.shownAt);if(wait>0)await new Promise(r=>setTimeout(r,wait));
         if(!BUSY.depth){el.classList.add('out');setTimeout(()=>{if(el.classList.contains('out'))el.hidden=true},320)}}}}}
 const createParty=(eventId,solo,opts)=>busy(solo?'Getting your scorecard ready…':'Starting your party…',()=>_createParty(eventId,solo,opts));
 const enterParty=(code,quiet,key,opts)=>busy(quiet?null:'Joining party '+String(code||'').toUpperCase().replace(/[^A-Z]/g,'')+'…',()=>_enterParty(code,quiet,key,opts));
