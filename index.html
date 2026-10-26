@@ -907,11 +907,10 @@ function vHome(){let h=vSwitchAsk();
     const def=real.find(e=>status(e)==='live')||real.filter(e=>status(e)==='recent'&&ago(e)<864e5).sort((x,y)=>ago(x)-ago(y))[0]||real.find(e=>['soon','upcoming'].includes(status(e)))||real.find(e=>status(e)==='recent')||evs[0];const custom=!def||S.homeCustom;
     h+=`<label class="f" for="evPick">Fight night you're watching</label><select id="evPick">${evs.map(e=>`<option value="${esc(e.id)}"${!custom&&e.id===def.id?' selected':''}>${esc(e.name)} · ${status(e)==='recent'?'Replay':esc(fmtDate(e.starts_at))}</option>`).join('')}<option value="__custom"${custom?' selected':''}>＋ Create your own card…</option></select>
     <div id="customForm" style="display:grid;gap:12px"${custom?'':' hidden'}>${cardFields(null)}<p class="small muted" style="margin:0">Your card is private to your party. Use it for UFC, kickboxing, a white-collar night or anything else.</p></div>
-    <div class="opts2"${S.homeCreator?' hidden':''} id="chatOpt"><label class="sw" for="optChatOff"><input type="checkbox" id="optChatOff"><span><b>Disable chat</b><em>Scores only, no messages. Good when people don’t know each other.</em></span></label>
-    </div>${creatorOn()?`<div class="opts2" role="radiogroup" aria-label="Type of party">
+    ${creatorOn()?`<div class="opts2" role="radiogroup" aria-label="Type of party">
       <label class="sw" for="ptMates"><input type="radio" name="ptype" id="ptMates" value="mates"${S.homeCreator?'':' checked'}><span><b>Mates party</b><em>Up to ${SMALL_MAX} people. Everyone sees everyone’s card, with party chat.</em></span></label>
       <label class="sw" for="ptCreator"><input type="radio" name="ptype" id="ptCreator" value="creator"${S.homeCreator?' checked':''}><span><b>Creator party</b><em>For podcasts and streams. Your panel’s cards are shown in full and your audience becomes the crowd stats. No chat.</em></span></label>
-      <div id="cpNameWrap"${S.homeCreator?'':' hidden'}><label class="f" for="cpName">Name your watch-along<input type="text" id="cpName" maxlength="40" placeholder="e.g. Propa watch-along"></label></div></div>`:''}
+      <div id="cpNameWrap"${S.homeCreator?'':' hidden'}><label class="f" for="cpName">Name your watch-along<input type="text" id="cpName" maxlength="40" placeholder="e.g. Mike’s watch-along"></label></div></div>`:''}
     <div class="choices"><button class="btn red" type="button" data-act="start" id="startBtn">${S.homeCreator?'Start the watch-along':'Start a party'}</button><button class="btn ghost" type="button" data-act="solo">Score solo</button></div>
     <p class="small muted" style="margin:0">Solo is just you. You can invite friends later and keep your scores.</p>`}
   h+=`</div><h3>Join</h3><form class="panel" id="joinForm"><label class="f" for="joinCode">Party code from a friend</label>
@@ -1287,7 +1286,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   switch(a){
     case 'home': if(S.party){S.view='party'}else{S.view='home';await loadEvents()}render();break;
     case 'start': case 'solo': {const p=$('#evPick');if(!p)return;t.disabled=true;
-      if(a==='start'&&S.homeCreator&&creatorOn())await createCreator(p.value);else await createParty(p.value,a==='solo',{chatOff:!!($('#optChatOff')||{}).checked});t.disabled=false;break}
+      if(a==='start'&&S.homeCreator&&creatorOn())await createCreator(p.value);else await createParty(p.value,a==='solo',{});t.disabled=false;break}
     case 'switchNo': {const was=S.switchAsk;S.switchAsk=null;if(S.party)S.view='party';render();break}
     case 'switchYes': {const a=S.switchAsk;if(!a)break;S.switchAsk=null;t.disabled=true;
       if(a.from){unsubscribe();await flushSaves();await sb.from('party_members').delete().eq('party_code',a.from).eq('user_id',S.uid)}
@@ -1360,7 +1359,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 });
 document.addEventListener('change',e=>{const t=e.target;
   if(t.id==='hpChat'){updateParty({chat_off:t.checked},t.checked?'Chat switched off':'Chat switched on');return}
-  if(t.name==='ptype'){S.homeCreator=t.value==='creator';const w=$('#cpNameWrap');if(w)w.hidden=!S.homeCreator;const co=$('#chatOpt');if(co)co.hidden=S.homeCreator;const b=$('#startBtn');if(b)b.textContent=S.homeCreator?'Start the watch-along':'Start a party';if(S.homeCreator){const n=$('#cpName');if(n)n.focus()}return}
+  if(t.name==='ptype'){S.homeCreator=t.value==='creator';const w=$('#cpNameWrap');if(w)w.hidden=!S.homeCreator;const b=$('#startBtn');if(b)b.textContent=S.homeCreator?'Start the watch-along':'Start a party';if(S.homeCreator){const n=$('#cpName');if(n)n.focus()}return}
   if(t.id==='cpWatch'&&S.cp){const watching=!t.checked;sb.from('party_members').update({watching}).eq('party_code',S.cp.party.code).eq('user_id',S.uid).then(({error})=>{if(error)toast('Couldn’t change that: '+error.message);else{toast(watching?'Just watching the crowd':'Your card is on show');refreshCp()}});return}
   if((t.id==='resHow'||t.id==='resRd')&&S.resEdit){S.resEdit[t.id==='resHow'?'how':'rd']=t.id==='resRd'?+t.value:t.value;if(t.id==='resHow')render();return}
   if(t.id==='evPick'){S.homeCustom=t.value==='__custom';const cf=$('#customForm');if(cf)cf.hidden=!S.homeCustom;if(S.homeCustom){const n=$('#cName');if(n)n.focus()}}
