@@ -285,6 +285,7 @@ nav.tabs button[aria-current="page"]::before{content:"";position:absolute;top:0;
 .addsheet strong{font-family:var(--display);font-weight:400;font-size:22px;line-height:1.1}
 .pill.cp{background:var(--gold);color:#0E1116}
 .cphead{border-color:var(--gold)}
+.hosttab{gap:14px}
 .linkbox{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}.linkbox.gold{border:2px solid var(--gold)}
 .linkbox .lnk{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;color:var(--muted)}
 .hostdot{color:var(--gold)}
@@ -608,7 +609,7 @@ async function createCreator(eventId){if(!needNick())return;const nameEl=$('#cpN
   for(let tries=0;tries<4;tries++){const code=genCode();
     const {error}=await sb.from('parties').insert({code,event_id:eventId,host:S.uid,solo:false,kind:'creator',name,chat_off:true,big:true});
     if(!error){const {data:p}=await sb.from('parties').select('*').eq('code',code).maybeSingle();S.tab='crowd';const ok=await joinCreator(p||{code,event_id:eventId,host:S.uid,kind:'creator',name},null,true);
-      if(ok){S.cpHost=true;toast('Watch-along ready. Share the crowd link on your stream.');render()}return}
+      if(ok){S.tab='host';toast('Watch-along ready. Share the crowd link on your stream.');render();window.scrollTo(0,0)}return}
     if(error.code!=='23505'){toast('Could not start the watch-along. '+error.message);return}}
   toast('Could not start the watch-along. Try again.')}
 async function cpCopy(which){const c=S.cp;if(!c)return;let link=joinLink(c.party.code);
@@ -1132,25 +1133,24 @@ function cpCard(uid,key){const c=S.cp&&S.cp.cards[uid]&&S.cp.cards[uid][key];if(
 function vCreatorHead(ev){const c=S.cp,p=c.party;const host=cpHostMe();const me=c.me||{};const n=c.crowd&&c.crowd.data?c.crowd.data.members:null;
   let h=`<div class="phead cphead"><div class="top"><div><div class="nm">${esc(cpName(p))}</div>
     <div class="meta"><span class="pill cp">Watch-along</span><span>${esc(ev.name)}</span><span>Code <span class="code">${esc(p.code)}</span></span>${n!=null?`<span>${n.toLocaleString()} in the watch-along</span>`:''}${cpOnPanel()?`<span class="pill cp">${host?'Host':'Panel'}</span>`:''}</div></div>
-    <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" type="button" data-act="cpCopy" data-v="crowd">Copy crowd link</button>
-    ${host?`<button class="btn sm ghost" type="button" data-act="cpHost" aria-expanded="${!!S.cpHost}">${S.cpHost?'Close settings':'Host settings'}</button>`:''}
+    <div class="row" style="justify-content:flex-end">${cpOnPanel()?'':'<button class="btn sm ghost" type="button" data-act="cpCopy" data-v="crowd">Copy link</button>'}
     <button class="btn sm ghost" type="button" data-act="cpLeave">${S.confirmLeave?'Tap to leave':'Leave'}</button></div></div>`;
-  if(cpOnPanel())h+=`<div class="hostp"><label class="sw" for="cpWatch"><input type="checkbox" id="cpWatch"${me.watching?'':' checked'}><span><b>I’m scoring</b><em>${me.watching?'Off: you’re just watching the crowd. Your card isn’t shown.':'Your card is shown to everyone. Untick to just watch the crowd.'}</em></span></label></div>`;
-  if(host&&S.cpHost)h+=vCpHost();
   return h+`</div>`}
-function vCpHost(){const c=S.cp,p=c.party;const co=c.panel.filter(m=>m.user_id!==p.host);
-  return `<div class="hostp">
-    ${S.cpRename?`<form class="row" id="cpRenameForm" style="flex-wrap:nowrap"><label for="cpNewName" hidden>Watch-along name</label><input type="text" id="cpNewName" maxlength="40" value="${esc(cpName(p))}"><button class="btn sm" type="submit">Save</button></form>`
+function vCpHost(){const c=S.cp,p=c.party;const co=c.panel.filter(m=>m.user_id!==p.host);const host=cpHostMe();const me=c.me||{};
+  const hostM=c.panel.find(m=>m.user_id===p.host);
+  return `<h3>${host?'Host':'Co-host'} · ${esc(cpName(p))}</h3><div class="panel hosttab">
+    <label class="sw" for="cpWatch"><input type="checkbox" id="cpWatch"${me.watching?'':' checked'}><span><b>I’m scoring</b><em>${me.watching?'Off: you’re just watching the crowd. Your card isn’t shown.':'Your card is shown to everyone. Untick to just watch the crowd.'}</em></span></label>
+    ${!host?'':S.cpRename?`<form class="row" id="cpRenameForm" style="flex-wrap:nowrap"><label for="cpNewName" hidden>Watch-along name</label><input type="text" id="cpNewName" maxlength="40" value="${esc(cpName(p))}"><button class="btn sm" type="submit">Save</button></form>`
       :`<div class="row" style="justify-content:space-between"><span><b>${esc(cpName(p))}</b></span><button type="button" class="btn sm ghost" data-act="cpRename">Rename</button></div>`}
     <div class="linkbox"><span class="k">Crowd link · share on stream</span><div class="row" style="flex-wrap:nowrap"><span class="lnk">${esc(joinLink(p.code).replace(/^https?:\/\//,''))}</span><button class="btn sm blue" type="button" data-act="cpCopy" data-v="crowd">Copy</button></div></div>
-    <div class="linkbox gold"><span class="k">Panel link · private, co-hosts only</span><div class="row" style="flex-wrap:nowrap"><span class="lnk">Never show this one on stream</span><button class="btn sm" type="button" data-act="cpCopy" data-v="panel" style="background:var(--gold);color:#0E1116">Copy</button></div>
-      <span class="small muted">Anyone with it joins the panel until it’s full.</span></div>
+    ${host?`<div class="linkbox gold"><span class="k">Panel link · private, co-hosts only</span><div class="row" style="flex-wrap:nowrap"><span class="lnk">Never show this one on stream</span><button class="btn sm" type="button" data-act="cpCopy" data-v="panel" style="background:var(--gold);color:#0E1116">Copy</button></div>
+      <span class="small muted">Anyone with it joins the panel until it’s full.</span></div>`:''}
     <div><div class="ded-h" style="padding:4px 0;display:flex;justify-content:space-between"><span>The panel</span><span style="color:var(--gold)">Co-hosts ${co.length} / 3</span></div>
-    <ul class="kick"><li><span>${esc(S.nick||'You')} (you)</span><span class="pill cp">Host</span></li>
-    ${co.map(m=>`<li><span>${esc(m.nickname)}${m.watching?' <span class="muted small">· watching</span>':''}</span><button type="button" class="btn sm ghost" data-act="cpRemove" data-id="${esc(m.user_id)}">${S.confirmKick===m.user_id?'Tap to confirm':'Move to crowd'}</button></li>`).join('')}
+    <ul class="kick"><li><span>${host?esc(S.nick||'You')+' (you)':esc(hostM?hostM.nickname:'Host')}${hostM&&hostM.watching?' <span class="muted small">· watching</span>':''}</span><span class="pill cp">Host</span></li>
+    ${co.map(m=>`<li><span>${esc(m.nickname)}${m.user_id===S.uid?' (you)':''}${m.watching?' <span class="muted small">· watching</span>':''}</span>${host?`<button type="button" class="btn sm ghost" data-act="cpRemove" data-id="${esc(m.user_id)}">${S.confirmKick===m.user_id?'Tap to confirm':'Move to crowd'}</button>`:''}</li>`).join('')}
     ${co.length<3?`<li><span class="muted" style="font-weight:400;font-style:italic">Waiting for ${3-co.length} more co-host${3-co.length===1?'':'s'}…</span></li>`:''}</ul></div>
-    <button type="button" class="btn ghost" data-act="cpReset">${S.confirmReset?'Tap to confirm':'Reset panel link'}</button>
-    <p class="small muted" style="margin:-6px 0 0">The old panel link stops working. Your current panel stays.</p></div>`}
+    ${host?`<button type="button" class="btn ghost" data-act="cpReset">${S.confirmReset?'Tap to confirm':'Reset panel link'}</button>
+    <p class="small muted" style="margin:-6px 0 0">The old panel link stops working. Your current panel stays.</p>`:''}</div>`}
 function vCrowd(ev){const f=findBout(S.sel);if(!f)return'';const {bt,key}=f;const c=S.cp;const onPanel=cpOnPanel();
   const panel=c.panel.filter(m=>!m.watching);const watching=c.panel.filter(m=>m.watching);
   const ids=[...panel.map(m=>m.user_id),...(onPanel?[]:[S.uid])];
@@ -1204,8 +1204,9 @@ function vParty(){const ev=evById(S.party.event_id);if(!ev)return `<div class="n
   let h=vSwitchAsk()+vSwitcher();
   if(S.ptab==='creator'){h+=vCreatorHead(ev)+boutTabs(ev,S.sel);
     if(ev.is_custom&&S.tab==='global')S.tab='score';
-    if(!['score','crowd','global'].includes(S.tab))S.tab='crowd';
-    if(S.tab==='score')h+=vScore(ev);else if(S.tab==='global')h+=vGlobal(ev);else h+=vCrowd(ev);
+    if(S.tab==='host'&&!cpOnPanel())S.tab='crowd';
+    if(!['score','crowd','host','global'].includes(S.tab))S.tab='crowd';
+    if(S.tab==='score')h+=vScore(ev);else if(S.tab==='global')h+=vGlobal(ev);else if(S.tab==='host')h+=vCpHost();else h+=vCrowd(ev);
     return h}
   h+=vPartyHead(ev);
   if(S.editCard&&ev.is_custom&&ev.owner===S.uid)return h+`<form class="panel" id="cardEditForm" style="margin-top:12px"><strong>Edit your card</strong>${cardFields(ev)}
@@ -1267,7 +1268,7 @@ function render(){
   const tabs=$('#tabs');
   if(S.view==='party'&&S.party&&evById(S.party.event_id)){
     const cust=evById(S.party.event_id).is_custom;
-    let list=S.ptab==='creator'&&S.cp?[['score','Scorecard'],['crowd','Watch-along'],['global','Global stats']]:S.party.solo?[['score','Scorecard'],['global','Global stats']]:[['score','Scorecard'],['pscores','Party scores'],['pstats','Party stats'],['global','Global stats']];
+    let list=S.ptab==='creator'&&S.cp?[...(cpOnPanel()?[['host','Host']]:[]),['score','Scorecard'],['crowd','Party stats'],['global','Global stats']]:S.party.solo?[['score','Scorecard'],['global','Global stats']]:[['score','Scorecard'],['pscores','Party scores'],['pstats','Party stats'],['global','Global stats']];
     if(cust)list=list.filter(x=>x[0]!=='global');
     if(S.party.big)list=list.filter(x=>x[0]!=='pscores');
     if(!list.some(t=>t[0]===S.tab))S.tab='score';
@@ -1280,7 +1281,7 @@ document.addEventListener('focusout',()=>setTimeout(()=>{if(deferRender)render()
 
 /* ---------- events ---------- */
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act],[data-tab]');if(!t)return;
-  if(t.dataset.tab){S.tab=t.dataset.tab;S.expand=null;render();window.scrollTo(0,0);if(S.tab==='global')loadGlobal(S.sel);if(S.tab==='crowd')refreshCp();return}
+  if(t.dataset.tab){S.tab=t.dataset.tab;S.expand=null;render();window.scrollTo(0,0);if(S.tab==='global')loadGlobal(S.sel);if(S.tab==='crowd'||S.tab==='host')refreshCp();return}
   const a=t.dataset.act;
   if(a!=='leave'&&a!=='cpLeave')S.confirmLeave=false;
   switch(a){
@@ -1293,7 +1294,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
       if(a.start)await createParty(a.start.eventId,false,{...a.start.opts,force:true});else await enterParty(a.code,false,null,{force:true});
       if(S.cp)S.ptab='mates';break}
     case 'ptab': S.ptab=t.dataset.v==='creator'&&S.cp?'creator':'mates';S.addSheet=null;S.confirmLeave=false;
-      if(S.ptab==='creator'){if(S.tab==='pscores'||S.tab==='pstats')S.tab='crowd';refreshCp()}else if(S.tab==='crowd')S.tab='score';render();window.scrollTo(0,0);break;
+      if(S.ptab==='creator'){if(S.tab==='pscores'||S.tab==='pstats')S.tab='crowd';refreshCp()}else if(S.tab==='crowd'||S.tab==='host')S.tab='score';render();window.scrollTo(0,0);break;
     case 'addSheet': S.addSheet=S.addSheet===t.dataset.v?null:t.dataset.v;render();{const i=$(S.addSheet==='watch'?'#cpCode':'#mjCode');if(i)i.focus()}break;
     case 'addClose': S.addSheet=null;render();break;
     case 'cpCopy': await cpCopy(t.dataset.v);break;
