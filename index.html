@@ -230,6 +230,37 @@ tr.totals td,tr.totals th{border-top:2px solid var(--ink)}
 .mrow .t.r{color:var(--red)} .mrow .t.b{color:var(--blue)} .mrow .t.e{color:var(--even)}
 .mrow .n{font-family:var(--label);font-size:12px;color:var(--muted)}
 .mcard{padding:4px 14px 12px;display:flex;flex-wrap:wrap;gap:4px;font-family:var(--mono);font-size:12px}
+.strips{display:grid;gap:10px}
+.strip{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 10px 8px;min-width:0}
+.strip.me{border-color:var(--ink)}
+.strip .sh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;min-width:0}
+.strip .sn{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.strip .sn .bdg{color:var(--gold);font-family:var(--label);font-size:12px;letter-spacing:.06em;margin-left:4px}
+.strip .sp{font-family:var(--label);font-weight:600;font-size:13px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
+.sgrid{display:grid;column-gap:1px;row-gap:2px;align-items:center;font-family:var(--label);font-variant-numeric:tabular-nums}
+.sgrid>*{min-width:0;text-align:center}
+.sgrid .h{font-size:10px;color:var(--muted);font-weight:600}
+.sgrid .f{text-align:left;font-size:12px;font-weight:700;letter-spacing:.03em}
+.sgrid .c{font-size:13px;line-height:22px;font-weight:500;color:var(--muted);background:rgba(138,145,156,.14)}
+.sgrid .c.r{background:rgba(240,74,92,.2)}.sgrid .c.b{background:rgba(94,143,240,.2)}
+.sgrid .c.w{color:var(--ink);font-weight:700}
+.sgrid .c.x{background:transparent;border:1px dashed var(--line);line-height:20px}
+.sgrid .c.s{background:var(--sunk);color:var(--muted)}
+.sgrid .tot{text-align:right;font-family:var(--display);font-size:19px;line-height:1;color:var(--muted)}
+.sgrid .tot.r{color:var(--red)}.sgrid .tot.b{color:var(--blue)}.sgrid .tot.e{color:var(--ink)}
+.sgrid .dd{font-size:10px;font-weight:700;line-height:12px}
+.strip .sv{margin-top:5px;display:flex;justify-content:space-between;gap:8px;font-family:var(--label);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase}
+.strip .sv .r{color:var(--red)}.strip .sv .b{color:var(--blue)}.strip .sv .e{color:var(--ink)}
+.strip .sv .vt{color:var(--muted);letter-spacing:.03em}
+.pill2{display:inline-grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px}
+.pill2 button{border:0;background:transparent;color:var(--muted);border-radius:9px;min-height:36px;padding:4px 16px;font-family:var(--label);font-weight:700;font-size:14px;letter-spacing:.04em}
+.pill2 button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.pshead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:18px 0 10px}
+.pshead h3{margin:0;min-width:0}
+.mrow.mrow4{grid-template-columns:minmax(0,1fr) auto auto auto}
+.mrow .tpk{font-family:var(--label);font-weight:700;font-size:12px}
+.mrow .tpk.r{color:var(--red)}.mrow .tpk.b{color:var(--blue)}
+.mlist .xstrip{padding:0 8px 10px}.mlist .xstrip .strip{border:0;padding:4px 4px 2px;background:var(--sunk)}
 .mcard span{border:1px solid var(--line);border-radius:4px;padding:2px 5px}
 .mcard .r{color:var(--red)} .mcard .b{color:var(--blue)} .mcard .e{color:var(--even)}
 
@@ -1021,27 +1052,51 @@ function vResult(f){const {bt,key,ev}=f;const pr=partyResult(key);const ed=S.res
   return h+`</div>`}
 
 function cellClass(x){return x[0]>x[1]?'cr':x[1]>x[0]?'cb':'ce'}
+// 3-letter code for a fighter (last name), e.g. FUR / JOS
+function fCode(n){return lastN(n).replace(/[^A-Za-zÀ-ž]/g,'').slice(0,3).toUpperCase()||'?'}
+// One person's card as a horizontal strip: rounds across, red and blue rows, running total on the right.
+// o = {name, badge, me, card:{r,d,e}, pick (html), vote (text)}
+function stripHTML(o,bt,rounds){const c=o.card||{r:[],d:[],e:null};const t=totals(c.r,c.d);const N=Math.max(rounds,1);
+  const cols=`30px repeat(${N},minmax(0,1fr)) 38px`;const cl=x=>full(x)?(x[0]>x[1]?'r':x[1]>x[0]?'b':'e'):'';
+  let g=`<span class="h" style="text-align:left">RD</span>`;for(let i=0;i<N;i++)g+=`<span class="h">${i+1}</span>`;g+=`<span class="h" style="text-align:right">TOT</span>`;
+  const w=t.n?winner(t):'';
+  for(const side of [0,1]){g+=`<span class="f" style="color:var(--${side?'blue':'red'})">${esc(fCode(side?bt.blue:bt.red))}</span>`;
+    for(let i=0;i<N;i++){const x=c.r[i];const k=cl(x);const won=full(x)&&(side?x[1]>x[0]:x[0]>x[1]);
+      g+=full(x)?`<span class="c ${k}${won?' w':''}">${x[side]}</span>`:`<span class="c x"></span>`}
+    g+=`<span class="tot ${t.n&&w===(side?'b':'r')?w:(t.n&&w==='e'?'e':'')}">${t.n?(side?t.b:t.a):'·'}</span>`}
+  const dd=Array.from({length:N},(_,i)=>{const r=c.d.filter(p=>p&&p.rd===i&&p.c==='r').length,b=c.d.filter(p=>p&&p.rd===i&&p.c==='b').length;
+    return (r?`<span style="color:var(--red)">−${r}</span>`:'')+(b?`<span style="color:var(--blue)">−${b}</span>`:'')});
+  if(dd.some(Boolean))g+=`<span></span>${dd.map(x=>`<span class="dd">${x}</span>`).join('')}<span></span>`;
+  let v='';
+  if(c.e){v=c.e.w==='nc'?`<span class="e">No contest · Rd ${c.e.rd}</span>`:`<span class="${c.e.w}">${esc(lastN(c.e.w==='r'?bt.red:bt.blue))} by ${c.e.how?HOW[c.e.how]:'stoppage'} · Rd ${c.e.rd}</span>`}
+  else if(t.n){const lead=w==='e'?'Level':`${esc(lastN(w==='r'?bt.red:bt.blue))} ${t.n>=rounds?'wins':'leads'}`;const sc=`${Math.max(t.a,t.b)}–${Math.min(t.a,t.b)}`;
+    v=`<span class="${w}">${t.n>=rounds?(w==='e'?'Draw '+sc:lead+' '+sc):lead+(w==='e'?' '+sc:' '+sc)+' · after Rd '+t.n}</span>`}
+  else v=`<span class="vt">No rounds scored yet</span>`;
+  return `<div class="strip${o.me?' me':''}"><div class="sh"><span class="sn">${o.dot?'<span class="dot"></span>':''}${esc(o.name)}${o.badge?`<span class="bdg">${esc(o.badge)}</span>`:''}</span>${o.pick?`<span class="sp">${o.pick}</span>`:''}</div>
+    <div class="sgrid" style="grid-template-columns:${cols}">${g}</div><div class="sv">${v}${o.vote?`<span class="vt">${esc(o.vote)}</span>`:''}</div></div>`}
+// The pick label shown on a strip ("Picked: Fury by KO", or a padlock until you've picked)
+function pickLabel(p,mine,vis,bt,ev){if(!p)return '';if(!mine&&!vis)return 'Picked: 🔒';
+  return `Picked: <b style="color:var(--${p[0]==='r'?'red':'blue'})">${esc(pickText(p,bt,ev))}</b>`}
+function psView(n){const v=ls.get('uc_psview',null);return v==='rounds'||v==='totals'?v:(n<=4?'rounds':'totals')}
 function vPartyScores(ev){const f=findBout(S.sel);if(!f)return'';const {bt,key}=f;const cards=partyCards(key);
-  const ids=[S.uid,...S.members.map(m=>m.user_id).filter(u=>u!==S.uid)];
-  let h=`<h3>${esc(bt.red)} vs ${esc(bt.blue)}</h3>`;const pr=partyResult(key);const stp=stopOf(pr);const rounds=stp?Math.min(stp.rd,bt.rounds):bt.rounds;
+  const others=S.members.filter(m=>m.user_id!==S.uid).sort((a,b)=>String(a.nickname||'').localeCompare(String(b.nickname||''),undefined,{sensitivity:'base'})).map(m=>m.user_id);
+  const ids=[S.uid,...others];
+  const pr=partyResult(key);const stp=stopOf(pr);const rounds=stp?Math.min(stp.rd,bt.rounds):bt.rounds;
+  const vis=picksVisible(key);const view=psView(ids.length);const st=pr&&STOP_KO.includes(pr.how);
+  const voteTxt=id=>{const v=voteOf(rawCard(id,key),pr);return v?(v==='rob'?(st?'Too early':'Robbery'):'Fair'):''};
+  let h=`<div class="pshead"><h3>${esc(bt.red)} vs ${esc(bt.blue)}</h3><div class="pill2" role="group" aria-label="Show"><button type="button" data-act="psView" data-v="rounds" aria-pressed="${view==='rounds'}">Rounds</button><button type="button" data-act="psView" data-v="totals" aria-pressed="${view==='totals'}">Totals</button></div></div>`;
   if(pr)h+=`<p class="resnote" style="color:${pr.w==='r'?'var(--red)':pr.w==='b'?'var(--blue)':'var(--ink)'}">Result: ${esc(resultText(pr,bt))}</p>`;
-  const vis=picksVisible(key),anyPick=ids.some(id=>{const c=rawCard(id,key);return c&&c.pick}),anyVote=ids.some(id=>voteOf(rawCard(id,key),pr));
-  const pickCell=id=>{const c=rawCard(id,key);const p=c&&c.pick;if(!p)return '<td class="cn">·</td>';if(id!==S.uid&&!vis)return '<td class="cn" title="Picked, hidden until you pick">🔒</td>';
-    return `<td class="${p[0]==='r'?'cr':'cb'} pkc">${esc(lastN(p[0]==='r'?bt.red:bt.blue))}<small>${p.slice(1)==='ko'?esc(koWord(ev)):'Dec'}</small></td>`};
-  const voteCell=id=>{const v=voteOf(rawCard(id,key),pr);const st=pr&&STOP_KO.includes(pr.how);return v?`<td class="${v==='rob'?'vrob':'vfair'}">${v==='rob'?(st?'Too early':'Robbery'):'Fair'}</td>`:'<td class="cn">·</td>'};
-  if(ids.length<=6){
-    h+=`<div class="tbl-wrap"><table class="cards"><thead><tr><th scope="col">Rd</th>${ids.map(id=>`<th scope="col">${S.online.has(id)?'<span class="dot"></span>':''}${esc(memberName(id))}</th>`).join('')}</tr></thead><tbody>`;
-    if(anyPick)h+=`<tr class="pick"><th scope="row">Pick</th>${ids.map(pickCell).join('')}</tr>`;
-    for(let i=0;i<rounds;i++){h+=`<tr><th scope="row">${i+1}</th>`;
-      for(const id of ids){const c=cards[id];const x=c&&c.r[i];const ded=c?c.d.filter(p=>p.rd===i).length:0;
-        h+=full(x)?`<td class="${cellClass(x)}">${x[0]}-${x[1]}${ded?'<sup>−'+ded+'</sup>':''}</td>`:'<td class="cn">·</td>'}h+='</tr>'}
-    h+=`<tr class="totals"><th scope="row">Tot</th>${ids.map(id=>{const c=cards[id];const t=c?totals(c.r,c.d):{n:0};return `<td class="${t.n?(winner(t)==='r'?'cr':winner(t)==='b'?'cb':'ce'):'cn'}">${t.n?t.a+'-'+t.b:'·'}</td>`}).join('')}</tr>${anyVote?`<tr class="pick"><th scope="row">Vote</th>${ids.map(voteCell).join('')}</tr>`:''}</tbody></table></div>
-    ${anyPick&&!vis?'<p class="small muted">🔒 Make your pick or score round 1 to see everyone’s picks.</p>':''}<p class="small muted">Totals include point deductions. A small −1 marks a round where a point was taken.</p>`}
-  else{
-    h+=`<ul class="mlist">${ids.map(id=>{const c=cards[id];const t=c?totals(c.r,c.d):{n:0};const w=t.n?winner(t):'';const open=S.expand===id;
-      return `<li><button type="button" class="mrow" data-act="expand" data-id="${esc(id)}" aria-expanded="${open}"><span class="nm">${S.online.has(id)?'<span class="dot"></span>':''}${esc(memberName(id))}</span><span class="n">${c&&c.e?(c.e.w==='nc'?'NC':esc(lastN(c.e.w==='r'?bt.red:bt.blue))+(c.e.how?' '+HOW[c.e.how]:''))+' R'+c.e.rd:t.n+'/'+bt.rounds}</span><span class="t ${w}">${t.n?t.a+'–'+t.b:'·'}</span></button>
-      ${open&&c?`<div class="mcard">${c.r.map((x,i)=>full(x)?`<span class="${cellClass(x).slice(1)}">${i+1}: ${x[0]}-${x[1]}</span>`:'').join('')}${c.d.length?`<span>${c.d.length} pt${c.d.length>1?'s':''} off</span>`:''}</div>`:''}</li>`}).join('')}</ul>
-    <p class="small muted">Tap anyone to see their round-by-round card.</p>`}
+  const anyPick=ids.some(id=>{const c=rawCard(id,key);return c&&c.pick});
+  const strip=id=>{const raw=rawCard(id,key);return stripHTML({name:memberName(id),me:id===S.uid,dot:id!==S.uid&&S.online.has(id),badge:S.party&&id===S.party.host?'★ HOST':'',
+    card:cards[id]||cardOf(id,key),pick:pickLabel(raw&&raw.pick,id===S.uid,vis,bt,ev),vote:voteTxt(id)},bt,rounds)};
+  if(view==='rounds')h+=`<div class="strips">${ids.map(strip).join('')}</div>`;
+  else h+=`<ul class="mlist">${ids.map(id=>{const c=cards[id];const t=c?totals(c.r,c.d):{n:0};const w=t.n?winner(t):'';const open=S.expand===id;const raw=rawCard(id,key);const p=raw&&raw.pick;
+      const pk=p?(id===S.uid||vis?`<span class="tpk ${p[0]}">${esc(lastN(p[0]==='r'?bt.red:bt.blue))} ${p.slice(1)==='ko'?esc(koWord(ev)):'Dec'}</span>`:'<span class="tpk">🔒</span>'):'<span></span>';
+      return `<li><button type="button" class="mrow mrow4" data-act="expand" data-id="${esc(id)}" aria-expanded="${open}"><span class="nm">${S.online.has(id)?'<span class="dot"></span>':''}${esc(memberName(id))}</span>${pk}<span class="n">${c&&c.e?(c.e.w==='nc'?'NC':esc(lastN(c.e.w==='r'?bt.red:bt.blue))+(c.e.how?' '+HOW[c.e.how]:''))+' R'+c.e.rd:t.n+'/'+rounds}</span><span class="t ${w}">${t.n?t.a+'–'+t.b:'·'}</span></button>
+      ${open?`<div class="xstrip">${strip(id)}</div>`:''}</li>`}).join('')}</ul>
+    <p class="small muted">Tap anyone to see their round-by-round card.</p>`;
+  if(anyPick&&!vis)h+='<p class="small muted">🔒 Make your pick or score round 1 to see everyone’s picks.</p>';
+  h+=`<p class="small muted">Totals include point deductions. A small −1 under a round marks a point taken.</p>`;
   return h}
 
 function statBlock(cards,bt){const n=Object.keys(cards).length;let v=verdictSummary(cards,bt.rounds);const rs=roundStats(cards,bt.rounds);
@@ -1161,11 +1216,9 @@ function vCrowd(ev){const f=findBout(S.sel);if(!f)return'';const {bt,key}=f;cons
   if(!ids.length)h+=`<div class="empty"><strong>No panel cards yet</strong>The panel’s cards appear here once they start scoring.</div>`;
   else{const name=uid=>uid===S.uid?'You':esc((c.panel.find(m=>m.user_id===uid)||{}).nickname||'Panel');
     const anyPick=ids.some(id=>{const x=cardFor(id);return x&&x.pick});
-    h+=`<div class="tbl-wrap"><table class="cards"><thead><tr><th scope="col">Rd</th>${ids.map(id=>`<th scope="col">${name(id)}${id===c.party.host?' <span class="hostdot" title="Host">★</span>':''}</th>`).join('')}</tr></thead><tbody>`;
-    if(anyPick)h+=`<tr class="pick"><th scope="row">Pick</th>${ids.map(id=>{const x=cardFor(id);const p=x&&x.pick;if(!p)return '<td class="cn">·</td>';if(id!==S.uid&&!vis)return '<td class="cn">🔒</td>';return `<td class="${p[0]==='r'?'cr':'cb'} pkc">${esc(lastN(p[0]==='r'?bt.red:bt.blue))}<small>${p.slice(1)==='ko'?esc(koWord(ev)):'Dec'}</small></td>`}).join('')}</tr>`;
-    for(let i=0;i<rounds;i++){h+=`<tr><th scope="row">${i+1}</th>`;for(const id of ids){const x=cardFor(id);const v=x&&x.r[i];const ded=x?x.d.filter(p=>p.rd===i).length:0;
-      h+=full(v)?`<td class="${cellClass(v)}">${v[0]}-${v[1]}${ded?'<sup>−'+ded+'</sup>':''}</td>`:'<td class="cn">·</td>'}h+='</tr>'}
-    h+=`<tr class="totals"><th scope="row">Tot</th>${ids.map(id=>{const x=cardFor(id);const t=x?totals(x.r,x.d):{n:0};return `<td class="${t.n?(winner(t)==='r'?'cr':winner(t)==='b'?'cb':'ce'):'cn'}">${t.n?t.a+'-'+t.b:'·'}</td>`}).join('')}</tr></tbody></table></div>`;
+    h+=`<div class="strips">${ids.map(id=>{const x=cardFor(id);const raw=id===S.uid?rawMine(key):(S.cp.cards[id]&&S.cp.cards[id][key]);
+      return stripHTML({name:id===S.uid?(onPanel?(S.nick||'You')+' (you)':'You'):((c.panel.find(m=>m.user_id===id)||{}).nickname||'Panel'),me:id===S.uid,
+        badge:id===c.party.host?'★ HOST':onPanel||id!==S.uid?'PANEL':'',card:x||{r:[],d:[],e:null},pick:pickLabel(x&&x.pick,id===S.uid,vis,bt,ev)},bt,rounds)}).join('')}</div>`;
     if(anyPick&&!vis)h+='<p class="small muted">🔒 Make your pick or score round 1 to see the panel’s picks.</p>'}
   if(watching.length)h+=`<p class="small muted">Watching the crowd: ${watching.map(m=>esc(m.nickname)).join(', ')}</p>`;
   // the crowd
@@ -1341,6 +1394,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     case 'leave': if(!S.confirmLeave){S.confirmLeave=true;render()}else await leaveParty();break;
     case 'leaveNow': await leaveParty();break;
     case 'expand': S.expand=S.expand===t.dataset.id?null:t.dataset.id;render();break;
+    case 'psView': ls.set('uc_psview',t.dataset.v==='totals'?'totals':'rounds');S.expand=null;render();break;
     case 'refreshGlobal': loadGlobal(S.sel);break;
     case 'chatOpen': openChat();break;
     case 'chatClose': closeChat();break;
