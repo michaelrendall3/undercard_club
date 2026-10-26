@@ -275,6 +275,21 @@ nav.tabs button[aria-current="page"]::before{content:"";position:absolute;top:0;
 .sw em{font-style:normal;font-size:13px;color:var(--muted)}
 .hostp{display:grid;gap:12px;border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
 .kick{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.pswitch{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;margin-top:12px}
+.ptab{border:0;background:transparent;color:var(--muted);border-radius:9px;min-height:40px;padding:6px 8px;font-family:var(--label);font-weight:700;font-size:15px;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ptab.on{background:var(--ink);color:var(--bg)}.ptab.cp.on{background:var(--gold);color:#0E1116}
+.ptab.add{border:2px dashed var(--line);color:var(--ink)}.ptab.add.cp{border-color:var(--gold);color:var(--gold)}
+.addsheet{margin-top:10px;border-width:2px}.addsheet.cp{border-color:var(--gold)}
+.addsheet .k,.linkbox .k{font-family:var(--label);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.addsheet.cp .k,.linkbox.gold .k{color:var(--gold)}
+.addsheet strong{font-family:var(--display);font-weight:400;font-size:22px;line-height:1.1}
+.pill.cp{background:var(--gold);color:#0E1116}
+.cphead{border-color:var(--gold)}
+.linkbox{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}.linkbox.gold{border:2px solid var(--gold)}
+.linkbox .lnk{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;color:var(--muted)}
+.hostdot{color:var(--gold)}
+.phead>*,.hostp>*,.linkbox>*,.addsheet>*,.phead .top>div:first-child{min-width:0}
+.rstat.pk3{grid-template-columns:128px 1fr 48px}
 .kick li{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .kick li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 /* party chat */
@@ -365,11 +380,12 @@ const S={
   global:{key:null,cards:null,loading:false,at:0},
   theme:ls.get('uc_theme')==='light'?'light':'dark',
   admin:{secret:ss.get('fg_admin'),ok:false,edit:null,confirmDel:null},
-  saveState:'', joinPrefill:'',
+  saveState:'', joinPrefill:'', joinKey:null,
+  cp:null, ptab:'mates', addSheet:null, switchAsk:null, cpHost:false, cpRename:false,
   chat:{msgs:[],open:false,lastSeen:0,menu:null,lastSend:0,posted:new Set(),reported:new Set(),muted:ls.get('fg_muted',[])}
 };
 const REACTS=['🥊','🔥','😱','🤡','💤'];
-const SMALL_MAX=15;
+const SMALL_MAX=25;
 const SPORTS={boxing:['Boxing',10],mma:['MMA',3],kickboxing:['Kickboxing',3],muaythai:['Muay Thai',5],whitecollar:['White collar',3],other:['Other',3]};
 const sportKey=ev=>SPORTS[ev&&ev.sport]?ev.sport:'boxing';
 const sportLabel=ev=>SPORTS[sportKey(ev)][0];
@@ -464,6 +480,7 @@ async function loadInvite(code){
   const {data:p}=await sb.from('parties').select('*').eq('code',code).maybeSingle();
   if(!p||p.solo){S.invite={code,missing:true};return}
   const ev=evById(p.event_id)||await fetchCard(p.event_id);
+  if(isCreator(p)){const {data:n}=await sb.rpc('uc_crowd_stats',{p_code:code,p_bout:''});S.invite={code,party:p,ev,creator:true,count:n&&n.members||0};return}
   const {data:ms}=await sb.from('party_members').select('user_id,nickname').eq('party_code',code);
   const host=(ms||[]).find(m=>m.user_id===p.host);
   S.invite={code,party:p,ev,host:host?host.nickname:'',count:(ms||[]).length}}
@@ -472,14 +489,14 @@ function vInvite(){const iv=S.invite||{};
     <div class="panel"><p style="margin:0">There’s no party with the code <b class="code">${esc(iv.code||'')}</b>. Check the link or the code with whoever sent it.</p>
     <button class="btn" type="button" data-act="inviteHome">Go to the home screen</button></div></div>`;
   const ev=iv.ev,bt=ev&&(ev.bouts||[])[0];
-  return `<div class="invite"><p class="iv-k">You’re invited</p>
-    <h2>${iv.host?esc(iv.host)+' has invited you to a party':'You’ve been invited to a party'}</h2>
+  return `<div class="invite"><p class="iv-k">${iv.creator?'Watch-along':'You’re invited'}</p>
+    <h2>${iv.creator?'You’re joining '+esc(cpName(iv.party)):iv.host?esc(iv.host)+' has invited you to a party':'You’ve been invited to a party'}</h2>
     <div class="iv-ev">${ev?`<b>${esc(ev.name)}</b>${bt?`<span><i class="r">${esc(bt.red)}</i> v <i class="b">${esc(bt.blue)}</i></span>`:''}${ev.starts_at&&!ev.is_custom?`<span>${esc(fmtDate(ev.starts_at))}</span>`:''}`:''}
-      <span>${iv.count===1?'1 person':iv.count+' people'} in the party · code <b class="code">${esc(iv.code)}</b></span></div>
+      <span>${iv.count===1?'1 person':iv.count+' people'} ${iv.creator?'in the crowd':'in the party'} · code <b class="code">${esc(iv.code)}</b></span></div>
     <form class="panel" id="inviteForm" autocomplete="off"><label class="f" for="inviteNick">Your name</label>
       <input type="text" id="inviteNick" maxlength="30" autocomplete="nickname" enterkeyhint="go" placeholder="e.g. Sarah" value="${esc(S.nick)}">
-      <button class="btn red" type="submit">Join party</button>
-      <p class="small muted" style="margin:0">This is how you’ll appear to everyone in the party.</p></form>
+      <button class="btn red" type="submit">${iv.creator?'Join the watch-along':'Join party'}</button>
+      <p class="small muted" style="margin:0">${iv.creator?(S.joinKey?'You’re joining as a co-host on the panel.':'Score along and your card joins the crowd stats. If you’re watching with mates, you can add your mates party too.'):'This is how you’ll appear to everyone in the party.'}</p></form>
     <p style="text-align:center;margin-top:18px"><button class="linkbtn" type="button" data-act="inviteHome">Not now, go to the home screen</button></p></div>`}
 async function fetchCard(id){const {data}=await sb.from('events').select('*').eq('id',id).maybeSingle();
   if(data){const i=S.events.findIndex(e=>e.id===id);if(i>=0)S.events[i]=data;else S.events.push(data)}return data}
@@ -511,6 +528,93 @@ function subscribe(){unsubscribe();const code=S.party.code;
   S.channel=ch}
 function unsubscribe(){if(S.channel){try{sb.removeChannel(S.channel)}catch(e){}S.channel=null}S.online=new Set()}
 
+
+/* ---------- creator parties (watch-alongs) ----------
+   S.party is always your own party (mates or solo). S.cp is the creator party you follow for the same fight night.
+   Your scores are saved to both, so you score once. Creator parties have no chat; the panel's cards are shown in full
+   and everyone else is added up on the server (uc_crowd_stats). */
+const creatorOn=()=>CONFIG.mode!=='claude';
+const isCreator=p=>!!p&&p.kind==='creator';
+const cpHostMe=()=>!!S.cp&&S.cp.party.host===S.uid;
+const cpMine=()=>S.cp&&S.cp.panel.find(m=>m.user_id===S.uid)||null;
+const cpOnPanel=()=>cpHostMe()||!!(cpMine()&&cpMine().role==='panel');
+const cpIds=()=>S.cp?S.cp.panel.map(m=>m.user_id):[];
+const cpName=p=>(p&&p.name)||'Watch-along';
+const joinLink=(code,key)=>location.origin+location.pathname+'#join-'+code+(key?'~'+key:'');
+function cpMemberName(uid){if(uid===S.uid)return (S.nick||'You')+' (you)';const m=S.cp&&S.cp.panel.find(x=>x.user_id===uid);return m?m.nickname:'Panel'}
+async function loadCpPanel(){const c=S.cp;if(!c)return;const code=c.party.code,host=c.party.host;
+  const [{data:pr},{data:pn},{data:hm},{data:me}]=await Promise.all([
+    sb.from('parties').select('*').eq('code',code).maybeSingle(),
+    sb.from('party_members').select('user_id,nickname,role,watching').eq('party_code',code).eq('role','panel'),
+    sb.from('party_members').select('user_id,nickname,role,watching').eq('party_code',code).eq('user_id',host).maybeSingle(),
+    sb.from('party_members').select('user_id,nickname,role,watching').eq('party_code',code).eq('user_id',S.uid).maybeSingle()]);
+  if(!S.cp||S.cp.party.code!==code)return;
+  if(!pr){toast('That watch-along has ended.');await leaveCreator(true);return}
+  if(!me){toast('You’re no longer in '+cpName(S.cp.party)+'.');await leaveCreator(true);return}
+  S.cp.party=pr;S.cp.me=me;
+  S.cp.panel=[...(hm?[hm]:[]),...(pn||[]).filter(m=>m.user_id!==host)];
+  const ids=cpIds();if(!ids.length){S.cp.cards={};return}
+  const {data:sc}=await sb.from('scores').select('user_id,bout_key,rounds,deductions,ended,updated_at').eq('party_code',code).in('user_id',ids);
+  if(!S.cp||S.cp.party.code!==code)return;
+  const cards={};(sc||[]).forEach(row=>{(cards[row.user_id]=cards[row.user_id]||{})[row.bout_key]=rowToCard(row)});S.cp.cards=cards}
+async function loadCrowd(key){const c=S.cp;if(!c||!key)return;const code=c.party.code;
+  const {data,error}=await sb.rpc('uc_crowd_stats',{p_code:code,p_bout:key});
+  if(!S.cp||S.cp.party.code!==code)return;
+  S.cp.crowd={key,data:error?null:data,err:error?error.message:null,at:Date.now()}}
+async function refreshCp(){if(!S.cp)return;await Promise.all([loadCpPanel(),loadCrowd(S.sel)]);render()}
+async function myPartiesFor(eventId,kind){const {data:ms}=await sb.from('party_members').select('party_code').eq('user_id',S.uid);const out=[];
+  for(const m of (ms||[])){const {data:p}=await sb.from('parties').select('*').eq('code',m.party_code).maybeSingle();
+    if(p&&p.event_id===eventId&&(p.kind||'mates')===kind&&!p.solo)out.push(p)}return out}
+// Join (or re-attach to) a creator party. key = the private panel code from a panel link.
+async function joinCreator(p,key,quiet){if(!needNick())return false;
+  const {data:ban}=await sb.from('party_bans').select('user_id').eq('party_code',p.code).eq('user_id',S.uid).maybeSingle();
+  if(ban){toast('The host has removed you from this watch-along.');if(quiet)ls.set('fg_cparty',null);return false}
+  if(!evById(p.event_id))await loadEvents();if(!evById(p.event_id))await fetchCard(p.event_id);
+  if(!evById(p.event_id)){if(!quiet)toast('That fight night isn’t available any more.');return false}
+  // you need your own party for this fight night (a solo one if you're watching alone)
+  if(!S.party||S.party.event_id!==p.event_id){const ok=await createParty(p.event_id,true,{keepCp:true});if(!ok)return false}
+  if(S.cp&&S.cp.party.code!==p.code)await leaveCreator(true);
+  const {data:me}=await sb.from('party_members').select('user_id').eq('party_code',p.code).eq('user_id',S.uid).maybeSingle();
+  if(me)await sb.from('party_members').update({nickname:S.nick}).eq('party_code',p.code).eq('user_id',S.uid);
+  else{let {error}=await sb.from('party_members').insert({party_code:p.code,user_id:S.uid,nickname:S.nick});
+    if(error&&/uc_one_creator/.test(error.message||'')){for(const o of await myPartiesFor(p.event_id,'creator'))if(o.code!==p.code)await sb.from('party_members').delete().eq('party_code',o.code).eq('user_id',S.uid);
+      ({error}=await sb.from('party_members').insert({party_code:p.code,user_id:S.uid,nickname:S.nick}))}
+    if(error){toast('Couldn’t join the watch-along: '+error.message);return false}}
+  S.cp={party:p,panel:[],cards:{},crowd:null,me:null};ls.set('fg_cparty',p.code);S.ptab='creator';S.addSheet=null;S.cpHost=false;S.cpRename=false;
+  if(S.tab==='pscores'||S.tab==='pstats')S.tab='crowd';
+  if(key){const {data:r,error}=await sb.rpc('uc_join_panel',{p_code:p.code,p_key:key});
+    toast(error?'Couldn’t join the panel: '+error.message:r==='panel'?'You’re on the panel. Your card is shown to everyone.':r==='full'?'The panel already has 3 co-hosts, so you’ve joined the crowd.':r==='host'?'You’re the host of this watch-along.':'That panel link has been reset. You’ve joined the crowd.')}
+  else if(!quiet)toast('Joined '+cpName(p));
+  // your scores so far count in the watch-along too
+  const mine=S.cards[S.uid]||{};Object.keys(mine).forEach(k=>{if(k.startsWith(p.event_id+'__'))pending.add(k)});if(pending.size)queueSave();
+  if(cpHostMe()||key)S.tab=S.tab==='score'?'score':'crowd';
+  await refreshCp();S.view='party';
+  if(location.hash){try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+  render();window.scrollTo(0,0);return true}
+async function attachCreator(code){const {data:p}=await sb.from('parties').select('*').eq('code',code).maybeSingle();
+  if(!p||!isCreator(p)||!S.party||p.event_id!==S.party.event_id){ls.set('fg_cparty',null);return}
+  const {data:me}=await sb.from('party_members').select('user_id').eq('party_code',code).eq('user_id',S.uid).maybeSingle();
+  if(!me){ls.set('fg_cparty',null);return}
+  S.cp={party:p,panel:[],cards:{},crowd:null,me:null};await refreshCp()}
+async function leaveCreator(silent){const c=S.cp;if(!c)return;S.cp=null;ls.set('fg_cparty',null);S.ptab='mates';S.cpHost=false;
+  if(S.tab==='crowd')S.tab='score';
+  await sb.from('party_members').delete().eq('party_code',c.party.code).eq('user_id',S.uid);
+  if(!silent){toast('You’ve left '+cpName(c.party));render()}}
+async function createCreator(eventId){if(!needNick())return;const nameEl=$('#cpName');const name=(nameEl&&nameEl.value||'').trim().slice(0,40);
+  if(!name){toast('Give your watch-along a name');if(nameEl)nameEl.focus();return}
+  if(eventId==='__custom'){const c=await saveCustomCard(null);if(!c)return;eventId=c.id}
+  if(!evById(eventId)){toast('Pick a fight night first');return}
+  if(!S.party||S.party.event_id!==eventId){const ok=await createParty(eventId,true,{keepCp:true});if(!ok)return}
+  for(let tries=0;tries<4;tries++){const code=genCode();
+    const {error}=await sb.from('parties').insert({code,event_id:eventId,host:S.uid,solo:false,kind:'creator',name,chat_off:true,big:true});
+    if(!error){const {data:p}=await sb.from('parties').select('*').eq('code',code).maybeSingle();S.tab='crowd';const ok=await joinCreator(p||{code,event_id:eventId,host:S.uid,kind:'creator',name},null,true);
+      if(ok){S.cpHost=true;toast('Watch-along ready. Share the crowd link on your stream.');render()}return}
+    if(error.code!=='23505'){toast('Could not start the watch-along. '+error.message);return}}
+  toast('Could not start the watch-along. Try again.')}
+async function cpCopy(which){const c=S.cp;if(!c)return;let link=joinLink(c.party.code);
+  if(which==='panel'){const {data:k,error}=await sb.rpc('uc_panel_key',{p_code:c.party.code,p_reset:false});if(error||!k){toast('Couldn’t get the panel link: '+(error?error.message:''));return}link=joinLink(c.party.code,k)}
+  try{await navigator.clipboard.writeText(link);toast(which==='panel'?'Panel link copied. Only send it to your co-hosts.':'Crowd link copied. Code: '+c.party.code)}catch(e){toast(which==='panel'?'Panel link: '+link:'Crowd code: '+c.party.code)}}
+
 async function saveCustomCard(id){const name=($('#cName').value||'').trim().slice(0,120);const sport=$('#cSport').value;const dtv=$('#cDate').value;
   const d=dtv?new Date(dtv):new Date();if(!name){toast('Give your card a name');$('#cName').focus();return null}if(isNaN(d)){toast('Check the date and time');return null}
   const pb=parseBouts($('#cBouts').value,sport);if(pb.err){toast(pb.err);$('#cBouts').focus();return null}
@@ -520,37 +624,53 @@ async function saveCustomCard(id){const name=($('#cName').value||'').trim().slic
   const ev={id:'c-'+newId().replace(/[^a-zA-Z0-9]/g,'').slice(0,24),...row,is_custom:true,owner:S.uid,is_practice:false};
   const {error}=await sb.from('events').insert(ev);if(error){toast('Couldn’t create the card: '+error.message);return null}
   S.events.push(ev);return ev}
-async function createParty(eventId,solo,opts){if(!needNick())return;opts=opts||{};
-  if(eventId==='__custom'){const c=await saveCustomCard(null);if(!c)return;eventId=c.id}
-  const ev=evById(eventId);if(!ev){toast('Pick a fight night first');return}
+async function createParty(eventId,solo,opts){if(!needNick())return false;opts=opts||{};
+  if(eventId==='__custom'){const c=await saveCustomCard(null);if(!c)return false;eventId=c.id}
+  const ev=evById(eventId);if(!ev){toast('Pick a fight night first');return false}
+  if(!solo&&!opts.force&&S.party&&!S.party.solo&&S.party.event_id===eventId){S.switchAsk={from:S.party.code,fromName:'your party',start:{eventId,opts}};S.view='home';render();window.scrollTo(0,0);return false}
   for(let tries=0;tries<4;tries++){const code=genCode();
-    const {error}=await sb.from('parties').insert({code,event_id:eventId,host:S.uid,solo,chat_off:!solo&&!!opts.chatOff,big:!solo&&!!opts.big});
-    if(!error){await enterParty(code);return}
-    if(error.code!=='23505'){toast('Could not start the party. '+error.message);return}}
-  toast('Could not start the party. Try again.')}
-async function enterParty(code,quiet){code=String(code||'').toUpperCase().replace(/[^A-Z]/g,'');
+    const {error}=await sb.from('parties').insert({code,event_id:eventId,host:S.uid,solo,chat_off:!solo&&!!opts.chatOff,big:false});
+    if(!error)return await enterParty(code,false,null,{force:true});
+    if(error.code!=='23505'){toast('Could not start the party. '+error.message);return false}}
+  toast('Could not start the party. Try again.');return false}
+async function enterParty(code,quiet,key,opts){opts=opts||{};code=String(code||'').toUpperCase().replace(/[^A-Z]/g,'');
   if(code.length!==6){toast('Party codes are 6 letters');return false}
   if(!needNick())return false;
   const {data:p,error}=await sb.from('parties').select('*').eq('code',code).maybeSingle();
   if(error||!p){if(!quiet)toast('No party found with code '+code);if(quiet)ls.set('fg_party',null);render();return false}
+  if(isCreator(p)){if(!creatorOn()){toast('Watch-alongs aren’t available here');return false}return joinCreator(p,key,quiet)}
   const {data:ban}=await sb.from('party_bans').select('user_id').eq('party_code',code).eq('user_id',S.uid).maybeSingle();
   if(ban){toast('The host has removed you from this party.');if(quiet)ls.set('fg_party',null);render();return false}
   const {data:me}=await sb.from('party_members').select('user_id').eq('party_code',code).eq('user_id',S.uid).maybeSingle();
   if(me){await sb.from('party_members').update({nickname:S.nick}).eq('party_code',code).eq('user_id',S.uid)}
   else{
+    // one mates party per fight night: ask before switching
+    if(!p.solo&&!opts.force&&S.party&&!S.party.solo&&S.party.code!==code&&S.party.event_id===p.event_id){S.switchAsk={code,from:S.party.code,fromName:'your party'};S.view=S.party?'party':'home';render();window.scrollTo(0,0);return false}
     if(!p.big){const {data:ms}=await sb.from('party_members').select('user_id').eq('party_code',code).limit(SMALL_MAX+1);
-      if((ms||[]).length>=SMALL_MAX){toast('This party is full ('+SMALL_MAX+' people). Ask the host to make it a big party.');if(quiet)ls.set('fg_party',null);render();return false}}
-    const {error:e2}=await sb.from('party_members').insert({party_code:code,user_id:S.uid,nickname:S.nick});
+      if((ms||[]).length>=SMALL_MAX){toast('This party’s full ('+SMALL_MAX+' max). Ask the host to start a new one.');if(quiet)ls.set('fg_party',null);render();return false}}
+    let {error:e2}=await sb.from('party_members').insert({party_code:code,user_id:S.uid,nickname:S.nick});
+    if(e2&&/uc_one_mates/.test(e2.message||'')){const other=(await myPartiesFor(p.event_id,'mates')).find(o=>o.code!==code);
+      if(other&&!opts.force){S.switchAsk={code,from:other.code,fromName:'party '+other.code};S.view=S.party?'party':'home';render();window.scrollTo(0,0);return false}
+      if(other){await sb.from('party_members').delete().eq('party_code',other.code).eq('user_id',S.uid);({error:e2}=await sb.from('party_members').insert({party_code:code,user_id:S.uid,nickname:S.nick}))}}
     if(e2){toast(p.big?'Couldn’t join: '+e2.message:'Couldn’t join. The party may be full, or the host may have removed you.');return false}}
   if(!evById(p.event_id))await loadEvents();
   if(!evById(p.event_id))await fetchCard(p.event_id);
-  S.party=p;S.cards={};S.members=[];S.expand=null;S.confirmLeave=false;S.editCard=false;resetChat();ls.set('fg_party',code);
+  const carry=S.party&&S.party.event_id===p.event_id&&S.party.code!==code?{...(S.cards[S.uid]||{})}:null;   // keep your scores when you swap party for the same fight
+  if(S.cp&&S.cp.party.event_id!==p.event_id){S.cp=null;ls.set('fg_cparty',null)}
+  S.party=p;S.cards={};S.members=[];S.expand=null;S.confirmLeave=false;S.editCard=false;S.switchAsk=null;S.addSheet=null;resetChat();ls.set('fg_party',code);
+  if(!opts.keepTab)S.ptab='mates';
   await Promise.all([loadMembers(),loadPartyScores(),loadChat()]);
+  if(carry){const mine=S.cards[S.uid]=S.cards[S.uid]||{};for(const [k,v] of Object.entries(carry)){if(!k.startsWith(p.event_id+'__'))continue;
+    const cur=mine[k];if(!cur||(!(cur.r||[]).some(Boolean)&&!(cur.d||[]).length&&!cur.pick)){mine[k]=v;pending.add(k)}}if(pending.size)queueSave()}
   const ev=evById(p.event_id);const f=findBout(S.sel);
   if(ev&&(ev.bouts||[]).length&&(!f||f.ev.id!==ev.id)){S.sel=bk(ev.id,ev.bouts[0].id);ls.set('fg_sel',S.sel)}
   subscribe();S.view='party';if(p.solo&&(S.tab==='pscores'||S.tab==='pstats'))S.tab='score';
   if(location.hash){try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}render();window.scrollTo(0,0);return true}
-async function leaveParty(kicked){unsubscribe();if(!kicked)await flushSaves();else pending.clear();S.party=null;S.editCard=false;S.cards={};S.members=[];resetChat();ls.set('fg_party',null);S.view='home';S.confirmLeave=false;await loadEvents();render();window.scrollTo(0,0)}
+async function leaveParty(kicked){if(S.cp&&S.party&&!S.party.solo){const ev=S.party.event_id,old=S.party.code;unsubscribe();if(!kicked)await flushSaves();else pending.clear();
+    if(!kicked)await sb.from('party_members').delete().eq('party_code',old).eq('user_id',S.uid);
+    if(await createParty(ev,true,{force:true})){S.ptab='creator';toast('You’ve left party '+old+'. You’re still in '+cpName(S.cp&&S.cp.party)+'.');render();return}}
+  unsubscribe();if(!kicked)await flushSaves();else pending.clear();if(!kicked&&S.party&&!S.party.solo)sb.from('party_members').delete().eq('party_code',S.party.code).eq('user_id',S.uid).then(()=>{},()=>{});
+  if(S.cp){S.cp=null;ls.set('fg_cparty',null)}S.ptab='mates';S.party=null;S.editCard=false;S.cards={};S.members=[];resetChat();ls.set('fg_party',null);S.view='home';S.confirmLeave=false;await loadEvents();render();window.scrollTo(0,0)}
 async function updateParty(patch,msg){if(!S.party||S.party.host!==S.uid)return;
   const {error}=await sb.from('parties').update(patch).eq('code',S.party.code);
   if(error){toast('Couldn’t change the setting: '+error.message);render();return}
@@ -577,6 +697,9 @@ async function flushSaves(){clearTimeout(saveTimer);if(saving||!pending.size||!S
   const keys=[...pending];pending.clear();const code=S.party.code;
   const rows=keys.map(k=>{const c=rawMine(k);return{party_code:code,user_id:S.uid,bout_key:k,rounds:c.r||[],deductions:c.d||[],ended:buildEnded(c),updated_at:new Date().toISOString()}});
   const {error}=await sb.from('scores').upsert(rows,{onConflict:'party_code,user_id,bout_key'});
+  if(!error&&S.cp&&S.party&&S.cp.party.event_id===S.party.event_id){const cc=S.cp.party.code;
+    const {error:ce}=await sb.from('scores').upsert(rows.map(r=>({...r,party_code:cc})),{onConflict:'party_code,user_id,bout_key'});
+    if(ce&&!flushSaves.warned){flushSaves.warned=true;toast('Couldn’t add your card to the watch-along: '+ce.message)}}
   saving=false;
   if(error){keys.forEach(k=>pending.add(k));setSave('Not saved yet, retrying…');setTimeout(flushSaves,4000)}
   else{setSave('Saved');if(!pending.size&&S.party&&S.party.code===code)ls.set('fg_backup_'+code,null);keys.forEach(maybePostRounds)}
@@ -602,7 +725,7 @@ async function loadGlobal(key,quiet){if(!key)return;if(!quiet)S.global={key,card
   S.global={key,cards,picks,votes,loading:false,at:Date.now()};render()}
 
 /* ---------- party chat ---------- */
-const chatOn=()=>S.view==='party'&&S.party&&!S.party.solo&&!S.party.chat_off&&!!evById(S.party.event_id);
+const chatOn=()=>S.view==='party'&&S.party&&!S.party.solo&&!S.party.chat_off&&S.ptab!=='creator'&&!!evById(S.party.event_id);
 const newId=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 const isMuted=uid=>S.chat.muted.includes(uid);
 async function loadChat(){if(!S.party||S.party.solo){S.chat.msgs=[];return}
@@ -773,7 +896,7 @@ function cardFields(ev){const sp=ev?sportKey(ev):'boxing';
     <label class="f" for="cBouts">Bouts, main event first<textarea id="cBouts" rows="5" placeholder="Red corner vs Blue corner&#10;Danny Smith vs Lee Jones | 3 | Heavyweight&#10;Ana Silva vs Kate Moore | 5 | Flyweight | title">${esc(bouts)}</textarea></label>
     <p class="small muted" style="margin:0" id="cHint">One bout per line, red corner first. Add | rounds | weight | title if you like. Leave the rounds out and ${SPORTS[sp][1]} rounds are used for ${SPORTS[sp][0]}.${ev?' Add new bouts at the bottom so scores already entered stay on the right fight.':''}</p>`}
 
-function vHome(){let h='';
+function vHome(){let h=vSwitchAsk();
   const rj=ls.get('fg_party',null);
   if(rj&&!S.party)h+=`<div class="rejoin" style="margin-top:8px"><div><div class="t">Your party</div><div class="n code">${esc(rj)}</div></div><button class="btn" type="button" data-act="rejoin">Rejoin</button></div>`;
   h+=`<h2>Welcome to the Club. Score the fight, live with your mates.</h2>
@@ -784,9 +907,12 @@ function vHome(){let h='';
     const def=real.find(e=>status(e)==='live')||real.filter(e=>status(e)==='recent'&&ago(e)<864e5).sort((x,y)=>ago(x)-ago(y))[0]||real.find(e=>['soon','upcoming'].includes(status(e)))||real.find(e=>status(e)==='recent')||evs[0];const custom=!def||S.homeCustom;
     h+=`<label class="f" for="evPick">Fight night you're watching</label><select id="evPick">${evs.map(e=>`<option value="${esc(e.id)}"${!custom&&e.id===def.id?' selected':''}>${esc(e.name)} · ${status(e)==='recent'?'Replay':esc(fmtDate(e.starts_at))}</option>`).join('')}<option value="__custom"${custom?' selected':''}>＋ Create your own card…</option></select>
     <div id="customForm" style="display:grid;gap:12px"${custom?'':' hidden'}>${cardFields(null)}<p class="small muted" style="margin:0">Your card is private to your party. Use it for UFC, kickboxing, a white-collar night or anything else.</p></div>
-    <div class="opts2"><label class="sw" for="optChatOff"><input type="checkbox" id="optChatOff"><span><b>Disable chat</b><em>Scores only, no messages. Good when people don’t know each other.</em></span></label>
-    <label class="sw" for="optBig"><input type="checkbox" id="optBig"><span><b>Big party (more than ${SMALL_MAX})</b><em>Party stats only, no individual scorecards. Slow mode on chat.</em></span></label></div>
-    <div class="choices"><button class="btn red" type="button" data-act="start">Start a party</button><button class="btn ghost" type="button" data-act="solo">Score solo</button></div>
+    <div class="opts2"${S.homeCreator?' hidden':''} id="chatOpt"><label class="sw" for="optChatOff"><input type="checkbox" id="optChatOff"><span><b>Disable chat</b><em>Scores only, no messages. Good when people don’t know each other.</em></span></label>
+    </div>${creatorOn()?`<div class="opts2" role="radiogroup" aria-label="Type of party">
+      <label class="sw" for="ptMates"><input type="radio" name="ptype" id="ptMates" value="mates"${S.homeCreator?'':' checked'}><span><b>Mates party</b><em>Up to ${SMALL_MAX} people. Everyone sees everyone’s card, with party chat.</em></span></label>
+      <label class="sw" for="ptCreator"><input type="radio" name="ptype" id="ptCreator" value="creator"${S.homeCreator?' checked':''}><span><b>Creator party</b><em>For podcasts and streams. Your panel’s cards are shown in full and your audience becomes the crowd stats. No chat.</em></span></label>
+      <div id="cpNameWrap"${S.homeCreator?'':' hidden'}><label class="f" for="cpName">Name your watch-along<input type="text" id="cpName" maxlength="40" placeholder="e.g. Propa watch-along"></label></div></div>`:''}
+    <div class="choices"><button class="btn red" type="button" data-act="start" id="startBtn">${S.homeCreator?'Start the watch-along':'Start a party'}</button><button class="btn ghost" type="button" data-act="solo">Score solo</button></div>
     <p class="small muted" style="margin:0">Solo is just you. You can invite friends later and keep your scores.</p>`}
   h+=`</div><h3>Join</h3><form class="panel" id="joinForm"><label class="f" for="joinCode">Party code from a friend</label>
     <input type="text" class="code-in" id="joinCode" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABCDEF" value="${esc(S.joinPrefill)}">
@@ -823,7 +949,7 @@ function vPartyHead(ev){const p=S.party;const n=S.members.length,on=S.online.siz
 function vHostPanel(){const p=S.party;const others=S.members.filter(m=>m.user_id!==S.uid);
   return `<div class="hostp"><label class="sw" for="hpChat"><input type="checkbox" id="hpChat"${p.chat_off?' checked':''}><span><b>Disable chat</b><em>Hides the chat for everyone in the party.</em></span></label>
   ${p.big?`<p class="small muted" style="margin:0">Big party: party stats only, slow mode on chat.${S.members.length<=SMALL_MAX?' <button type="button" class="linkbtn" data-act="makeSmall">Switch back to small</button>':''}</p>`
-    :`<div class="row" style="justify-content:space-between"><span class="small muted">Small party: up to ${SMALL_MAX}, with everyone’s cards.</span><button type="button" class="btn sm ghost" data-act="makeBig">${S.confirmBig?'Tap to confirm':'Make it a big party'}</button></div>`}
+    :`<p class="small muted" style="margin:0">Up to ${SMALL_MAX} people, with everyone’s cards. Got a bigger audience? Start a creator party from the home screen.</p>`}
   <div><div class="ded-h" style="padding:4px 0">People (${S.members.length})</div>
   ${others.length?`<ul class="kick">${others.map(m=>`<li><span>${S.online.has(m.user_id)?'<span class="dot"></span>':''}${esc(m.nickname)}</span><button type="button" class="btn sm ghost" data-act="kick" data-id="${esc(m.user_id)}">${S.confirmKick===m.user_id?'Tap to remove':'Remove'}</button></li>`).join('')}</ul>`:'<p class="small muted" style="margin:0">No one else here yet.</p>'}
   <p class="small muted" style="margin:6px 0 0">Removed people can’t rejoin this party.</p></div></div>`}
@@ -973,13 +1099,116 @@ function vGlobal(ev){const f=findBout(S.sel);if(!f||ev.is_custom)return'';const 
     h+=`<h3>Your party vs everyone</h3><div class="card" style="margin-top:0;padding:12px;display:grid;gap:8px"><div class="vs"><span class="small">Party</span>${barHTML({r:pv.wr,b:pv.wb,e:pv.wd,n:pv.done})}<span class="small">${pc(pv.wr,pv.done)} ${esc(lastN(bt.red))}</span>
       <span class="small">Everyone</span>${barHTML({r:b.v.wr,b:b.v.wb,e:b.v.wd,n:b.v.done})}<span class="small">${pc(b.v.wr,b.v.done)} ${esc(lastN(bt.red))}</span></div></div>`}}
   {const P=g.picks||{},V=g.votes||{};const np=(P.rko||0)+(P.rdec||0)+(P.bko||0)+(P.bdec||0),nv=(V.fair||0)+(V.rob||0);
-   if(np)h+=`<h3>Who the Club got</h3><div class="card" style="margin-top:0">${[['rko','r'],['rdec','r'],['bko','b'],['bdec','b']].map(([k,c])=>`<div class="rstat"><span class="n" style="width:auto;min-width:118px;color:var(--${c==='r'?'red':'blue'})">${esc(pickText(k,bt,ev))}</span><div class="bar"><i class="${c==='r'?'br':'bb'}" style="width:${(P[k]||0)/np*100}%"></i></div><span class="avg">${pc(P[k]||0,np)}</span></div>`).join('')}</div><p class="small muted">${np} pick${np===1?'':'s'} across every party.</p>`;
+   if(np)h+=`<h3>Who the Club got</h3><div class="card" style="margin-top:0">${[['rko','r'],['rdec','r'],['bko','b'],['bdec','b']].map(([k,c])=>`<div class="rstat pk3"><span class="n" style="color:var(--${c==='r'?'red':'blue'})">${esc(pickText(k,bt,ev))}</span><div class="bar"><i class="${c==='r'?'br':'bb'}" style="width:${(P[k]||0)/np*100}%"></i></div><span class="avg">${pc(P[k]||0,np)}</span></div>`).join('')}</div><p class="small muted">${np} pick${np===1?'':'s'} across every party.</p>`;
    if(nv)h+=`<h3>Fair or robbery?</h3><div class="rb">${V.fair?`<span class="f" style="flex:${V.fair}">Fair ${pc(V.fair,nv)}</span>`:''}${V.rob?`<span class="rob" style="flex:${V.rob}">Robbery ${pc(V.rob,nv)}</span>`:''}</div><p class="small muted">${nv} vote${nv===1?'':'s'} across every party.</p>`}
   h+=`<p class="small muted">Updated ${new Date(g.at).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}. Refreshes every 30 seconds. <button type="button" class="linkbtn" data-act="refreshGlobal">Refresh now</button></p>`;
   return h}
 
+
+function vSwitchAsk(){const a=S.switchAsk;if(!a)return'';
+  return `<div class="panel swask" style="margin-top:12px;border-color:var(--red)"><strong style="font-family:var(--display);font-weight:400;font-size:22px">Switch parties?</strong>
+    <p style="margin:0">You’re already in ${a.from?'<b class="code">'+esc(a.from)+'</b>':'a mates party'} for this fight night. You can be in one mates party per fight night${creatorOn()?', plus one watch-along':''}.</p>
+    <p class="small muted" style="margin:0">Your scores come with you.</p>
+    <div class="choices"><button class="btn ghost" type="button" data-act="switchNo">Stay</button><button class="btn red" type="button" data-act="switchYes">Switch</button></div></div>`}
+function vSwitcher(){if(!creatorOn()||!S.party)return'';const solo=S.party.solo;const c=S.cp;
+  if(!c&&solo&&S.party.host!==S.uid)return'';
+  const left=c&&solo?`<button type="button" class="ptab add" data-act="addSheet" data-v="mates" aria-expanded="${S.addSheet==='mates'}">＋ Mates party</button>`
+    :`<button type="button" class="ptab${S.ptab!=='creator'?' on':''}" data-act="ptab" data-v="mates" aria-pressed="${S.ptab!=='creator'}">${solo?'Solo':'Mates'}</button>`;
+  const right=c?`<button type="button" class="ptab cp${S.ptab==='creator'?' on':''}" data-act="ptab" data-v="creator" aria-pressed="${S.ptab==='creator'}">${esc(cpName(c.party))}</button>`
+    :`<button type="button" class="ptab add cp" data-act="addSheet" data-v="watch" aria-expanded="${S.addSheet==='watch'}">＋ Watch-along</button>`;
+  return `<div class="pswitch" role="group" aria-label="Your parties">${left}${right}</div>${vAddSheet()}`}
+function vAddSheet(){const a=S.addSheet;if(!a)return'';
+  if(a==='watch')return `<form class="panel addsheet cp" id="cpJoinForm" autocomplete="off"><span class="k">Join a watch-along</span><strong>Following a podcast or stream?</strong>
+    <p class="small" style="margin:0">Enter the code or link they give out. You’ll see the panel’s cards and the crowd stats${S.party.solo?'':', and you stay in your mates party too'}.</p>
+    <label class="f" for="cpCode">Crowd code or link<input type="text" id="cpCode" autocomplete="off" autocapitalize="characters" placeholder="ABCDEF"></label>
+    <div class="choices"><button class="btn ghost" type="button" data-act="addClose">Cancel</button><button class="btn" type="submit" style="background:var(--gold);color:#0E1116">Join</button></div>
+    <p class="small muted" style="margin:0">Score once and it counts in both.</p></form>`;
+  return `<form class="panel addsheet" id="mjForm" autocomplete="off"><span class="k">Add your mates</span><strong>Watching with mates too?</strong>
+    <p class="small" style="margin:0">Start a party or join theirs. You’ll get their cards and chat, and you stay in ${esc(cpName(S.cp&&S.cp.party))}.</p>
+    <button class="btn red" type="button" data-act="invite">Start a mates party</button>
+    <label class="f" for="mjCode">Or join with a code<input type="text" class="code-in" id="mjCode" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABCDEF"></label>
+    <div class="choices"><button class="btn ghost" type="button" data-act="addClose">Cancel</button><button class="btn blue" type="submit">Join</button></div></form>`}
+function cpCard(uid,key){const c=S.cp&&S.cp.cards[uid]&&S.cp.cards[uid][key];if(!c)return null;const e=stopOf(partyResult(key));let r=c.r||[],d=c.d||[];
+  if(e){r=r.slice(0,e.rd);d=d.filter(p=>p.rd<e.rd)}return{r,d,pick:c.pick||null,vote:c.vote||null}}
+function vCreatorHead(ev){const c=S.cp,p=c.party;const host=cpHostMe();const me=c.me||{};const n=c.crowd&&c.crowd.data?c.crowd.data.members:null;
+  let h=`<div class="phead cphead"><div class="top"><div><div class="nm">${esc(cpName(p))}</div>
+    <div class="meta"><span class="pill cp">Watch-along</span><span>${esc(ev.name)}</span><span>Code <span class="code">${esc(p.code)}</span></span>${n!=null?`<span>${n.toLocaleString()} in the watch-along</span>`:''}${cpOnPanel()?`<span class="pill cp">${host?'Host':'Panel'}</span>`:''}</div></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn sm ghost" type="button" data-act="cpCopy" data-v="crowd">Copy crowd link</button>
+    ${host?`<button class="btn sm ghost" type="button" data-act="cpHost" aria-expanded="${!!S.cpHost}">${S.cpHost?'Close settings':'Host settings'}</button>`:''}
+    <button class="btn sm ghost" type="button" data-act="cpLeave">${S.confirmLeave?'Tap to leave':'Leave'}</button></div></div>`;
+  if(cpOnPanel())h+=`<div class="hostp"><label class="sw" for="cpWatch"><input type="checkbox" id="cpWatch"${me.watching?'':' checked'}><span><b>I’m scoring</b><em>${me.watching?'Off: you’re just watching the crowd. Your card isn’t shown.':'Your card is shown to everyone. Untick to just watch the crowd.'}</em></span></label></div>`;
+  if(host&&S.cpHost)h+=vCpHost();
+  return h+`</div>`}
+function vCpHost(){const c=S.cp,p=c.party;const co=c.panel.filter(m=>m.user_id!==p.host);
+  return `<div class="hostp">
+    ${S.cpRename?`<form class="row" id="cpRenameForm" style="flex-wrap:nowrap"><label for="cpNewName" hidden>Watch-along name</label><input type="text" id="cpNewName" maxlength="40" value="${esc(cpName(p))}"><button class="btn sm" type="submit">Save</button></form>`
+      :`<div class="row" style="justify-content:space-between"><span><b>${esc(cpName(p))}</b></span><button type="button" class="btn sm ghost" data-act="cpRename">Rename</button></div>`}
+    <div class="linkbox"><span class="k">Crowd link · share on stream</span><div class="row" style="flex-wrap:nowrap"><span class="lnk">${esc(joinLink(p.code).replace(/^https?:\/\//,''))}</span><button class="btn sm blue" type="button" data-act="cpCopy" data-v="crowd">Copy</button></div></div>
+    <div class="linkbox gold"><span class="k">Panel link · private, co-hosts only</span><div class="row" style="flex-wrap:nowrap"><span class="lnk">Never show this one on stream</span><button class="btn sm" type="button" data-act="cpCopy" data-v="panel" style="background:var(--gold);color:#0E1116">Copy</button></div>
+      <span class="small muted">Anyone with it joins the panel until it’s full.</span></div>
+    <div><div class="ded-h" style="padding:4px 0;display:flex;justify-content:space-between"><span>The panel</span><span style="color:var(--gold)">Co-hosts ${co.length} / 3</span></div>
+    <ul class="kick"><li><span>${esc(S.nick||'You')} (you)</span><span class="pill cp">Host</span></li>
+    ${co.map(m=>`<li><span>${esc(m.nickname)}${m.watching?' <span class="muted small">· watching</span>':''}</span><button type="button" class="btn sm ghost" data-act="cpRemove" data-id="${esc(m.user_id)}">${S.confirmKick===m.user_id?'Tap to confirm':'Move to crowd'}</button></li>`).join('')}
+    ${co.length<3?`<li><span class="muted" style="font-weight:400;font-style:italic">Waiting for ${3-co.length} more co-host${3-co.length===1?'':'s'}…</span></li>`:''}</ul></div>
+    <button type="button" class="btn ghost" data-act="cpReset">${S.confirmReset?'Tap to confirm':'Reset panel link'}</button>
+    <p class="small muted" style="margin:-6px 0 0">The old panel link stops working. Your current panel stays.</p></div>`}
+function vCrowd(ev){const f=findBout(S.sel);if(!f)return'';const {bt,key}=f;const c=S.cp;const onPanel=cpOnPanel();
+  const panel=c.panel.filter(m=>!m.watching);const watching=c.panel.filter(m=>m.watching);
+  const ids=[...panel.map(m=>m.user_id),...(onPanel?[]:[S.uid])];
+  const cardFor=uid=>uid===S.uid?myCard(key):cpCard(uid,key);
+  const pr=partyResult(key);const stp=stopOf(pr);const rounds=stp?Math.min(stp.rd,bt.rounds):bt.rounds;
+  const vis=onPanel||picksVisible(key);
+  let h=`<h3>The panel · ${esc(bt.red)} vs ${esc(bt.blue)}</h3>`;
+  if(!ids.length)h+=`<div class="empty"><strong>No panel cards yet</strong>The panel’s cards appear here once they start scoring.</div>`;
+  else{const name=uid=>uid===S.uid?'You':esc((c.panel.find(m=>m.user_id===uid)||{}).nickname||'Panel');
+    const anyPick=ids.some(id=>{const x=cardFor(id);return x&&x.pick});
+    h+=`<div class="tbl-wrap"><table class="cards"><thead><tr><th scope="col">Rd</th>${ids.map(id=>`<th scope="col">${name(id)}${id===c.party.host?' <span class="hostdot" title="Host">★</span>':''}</th>`).join('')}</tr></thead><tbody>`;
+    if(anyPick)h+=`<tr class="pick"><th scope="row">Pick</th>${ids.map(id=>{const x=cardFor(id);const p=x&&x.pick;if(!p)return '<td class="cn">·</td>';if(id!==S.uid&&!vis)return '<td class="cn">🔒</td>';return `<td class="${p[0]==='r'?'cr':'cb'} pkc">${esc(lastN(p[0]==='r'?bt.red:bt.blue))}<small>${p.slice(1)==='ko'?esc(koWord(ev)):'Dec'}</small></td>`}).join('')}</tr>`;
+    for(let i=0;i<rounds;i++){h+=`<tr><th scope="row">${i+1}</th>`;for(const id of ids){const x=cardFor(id);const v=x&&x.r[i];const ded=x?x.d.filter(p=>p.rd===i).length:0;
+      h+=full(v)?`<td class="${cellClass(v)}">${v[0]}-${v[1]}${ded?'<sup>−'+ded+'</sup>':''}</td>`:'<td class="cn">·</td>'}h+='</tr>'}
+    h+=`<tr class="totals"><th scope="row">Tot</th>${ids.map(id=>{const x=cardFor(id);const t=x?totals(x.r,x.d):{n:0};return `<td class="${t.n?(winner(t)==='r'?'cr':winner(t)==='b'?'cb':'ce'):'cn'}">${t.n?t.a+'-'+t.b:'·'}</td>`}).join('')}</tr></tbody></table></div>`;
+    if(anyPick&&!vis)h+='<p class="small muted">🔒 Make your pick or score round 1 to see the panel’s picks.</p>'}
+  if(watching.length)h+=`<p class="small muted">Watching the crowd: ${watching.map(m=>esc(m.nickname)).join(', ')}</p>`;
+  // the crowd
+  const cr=c.crowd&&c.crowd.key===key?c.crowd:null;
+  h+=`<h3>The crowd</h3>`;
+  if(!cr)return h+`<p class="muted">Loading the crowd…</p>`;
+  if(cr.err||!cr.data)return h+`<div class="note err">Couldn’t load the crowd stats${cr.err?': '+esc(cr.err):''}</div>`;
+  const d=cr.data;const n=d.n||0;
+  if(!n)h+=`<div class="empty"><strong>No crowd cards yet</strong>${(d.members||0).toLocaleString()} in the watch-along. Stats fill in as people score.</div>`;
+  else{const rs=Array.from({length:rounds},(_,i)=>{const x=(d.rounds||[]).find(q=>q.i===i)||{r:0,b:0,e:0,sa:0,sb:0};const m=x.r+x.b+x.e;return{r:x.r,b:x.b,e:x.e,n:m,aa:m?x.sa/m:0,ab:m?x.sb/m:0}});
+    const A=d.ahead||{r:0,b:0,e:0};const an=A.r+A.b+A.e;
+    h+=`<div class="statgrid"><div class="stat r"><div class="k">${esc(lastN(bt.red))}</div><div class="v">${pc(A.r,an)}</div></div><div class="stat"><div class="k">Level</div><div class="v">${pc(A.e,an)}</div></div><div class="stat b"><div class="k">${esc(lastN(bt.blue))}</div><div class="v">${pc(A.b,an)}</div></div></div>
+      <p class="small muted">Who’s ahead on ${n.toLocaleString()} crowd card${n===1?'':'s'}, out of ${(d.members||0).toLocaleString()} in the watch-along.</p>`;
+    let hot=-1,best=-1;rs.forEach((s,i)=>{if(s.n<2)return;const split=1-Math.abs(s.r-s.b)/s.n;if(split>best){best=split;hot=i}});
+    // panel v crowd
+    const notes=[];for(const m of panel){const x=cardFor(m.user_id);if(!x)continue;let agree=0,cnt=0,alone=[];
+      rs.forEach((s,i)=>{const v=x.r[i];if(!full(v)||s.n<2)return;const maj=s.r>s.b&&s.r>s.e?'r':s.b>s.r&&s.b>s.e?'b':null;if(!maj)return;cnt++;const mine=v[0]>v[1]?'r':v[1]>v[0]?'b':'e';if(mine===maj)agree++;else if(mine!=='e'&&Math.max(s.r,s.b)/s.n>=0.7)alone.push(i+1)});
+      if(cnt)notes.push(`<div><span>${esc(m.user_id===S.uid?'You':m.nickname)}</span><em>${agree} of ${cnt} rounds with the crowd${alone.length?` · out on their own in rd ${alone.join(', ')}`:''}</em></div>`)}
+    if(!onPanel){const x=myCard(key);let agree=0,cnt=0;rs.forEach((s,i)=>{const v=x.r[i];if(!full(v)||s.n<2)return;const maj=s.r>s.b&&s.r>s.e?'r':s.b>s.r&&s.b>s.e?'b':null;if(!maj)return;cnt++;if((v[0]>v[1]?'r':v[1]>v[0]?'b':'e')===maj)agree++});
+      if(cnt)notes.push(`<div><span>You</span><em>${agree} of ${cnt} rounds with the crowd</em></div>`)}
+    if(notes.length)h+=`<h3>Panel v crowd</h3><div class="card rescard"><div class="wl">${notes.join('')}</div></div>`;
+    if(hot>=0&&best>=0.5)h+=`<div class="callout"><span class="k">Most disputed round</span><span class="v">Round ${hot+1}: ${pc(rs[hot].r,rs[hot].n)} had it ${esc(lastN(bt.red))}, ${pc(rs[hot].b,rs[hot].n)} had it ${esc(lastN(bt.blue))}</span></div>`;
+    h+=`<h3>Round by round</h3><div class="card" style="margin-top:0">${rs.map((s,i)=>`<div class="rstat${i===hot&&best>=0.5?' hot':''}"><span class="n">RD ${i+1}</span>${barHTML(s)}<span class="avg">${s.n?pc(s.r,s.n)+' · '+pc(s.b,s.n):'no cards'}</span></div>`).join('')}</div>
+      <p class="small muted">Share of the crowd giving each round to ${esc(lastN(bt.red))} (red), even (grey) or ${esc(lastN(bt.blue))} (blue).</p>`}
+  const P=d.picks||{},V=d.votes||{};const np=(P.rko||0)+(P.rdec||0)+(P.bko||0)+(P.bdec||0),nv=(V.fair||0)+(V.rob||0);
+  if(np){h+=`<h3>Who the crowd got</h3>`;
+    h+=vis?`<div class="card" style="margin-top:0">${[['rko','r'],['rdec','r'],['bko','b'],['bdec','b']].map(([k,cc])=>`<div class="rstat pk3"><span class="n" style="color:var(--${cc==='r'?'red':'blue'})">${esc(pickText(k,bt,ev))}</span><div class="bar"><i class="${cc==='r'?'br':'bb'}" style="width:${(P[k]||0)/np*100}%"></i></div><span class="avg">${pc(P[k]||0,np)}</span></div>`).join('')}</div><p class="small muted">${np.toLocaleString()} pick${np===1?'':'s'} in the crowd.</p>`
+      :`<p class="small muted">🔒 Make your pick or score round 1 to see who the crowd got.</p>`}
+  if(nv&&pr&&pr.w!=='nc')h+=`<h3>Fair or robbery?</h3><div class="rb">${V.fair?`<span class="f" style="flex:${V.fair}">Fair ${pc(V.fair,nv)}</span>`:''}${V.rob?`<span class="rob" style="flex:${V.rob}">Robbery ${pc(V.rob,nv)}</span>`:''}</div><p class="small muted">${nv.toLocaleString()} vote${nv===1?'':'s'} in the crowd.</p>`;
+  h+=`<p class="small muted">Updated ${new Date(cr.at).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'})}. Refreshes every 15 seconds. <button type="button" class="linkbtn" data-act="cpRefresh">Refresh now</button></p>
+    <div class="note" style="text-align:center">No chat in watch-alongs.${S.party&&!S.party.solo?' Chat with your mates in the Mates tab.':''}</div>`;
+  return h}
+
 function vParty(){const ev=evById(S.party.event_id);if(!ev)return `<div class="note">This fight night is no longer on the schedule.</div><p><button class="btn ghost" type="button" data-act="leaveNow">Back to start</button></p>`;
-  let h=vPartyHead(ev);
+  if(S.ptab==='creator'&&!S.cp)S.ptab='mates';
+  let h=vSwitchAsk()+vSwitcher();
+  if(S.ptab==='creator'){h+=vCreatorHead(ev)+boutTabs(ev,S.sel);
+    if(ev.is_custom&&S.tab==='global')S.tab='score';
+    if(!['score','crowd','global'].includes(S.tab))S.tab='crowd';
+    if(S.tab==='score')h+=vScore(ev);else if(S.tab==='global')h+=vGlobal(ev);else h+=vCrowd(ev);
+    return h}
+  h+=vPartyHead(ev);
   if(S.editCard&&ev.is_custom&&ev.owner===S.uid)return h+`<form class="panel" id="cardEditForm" style="margin-top:12px"><strong>Edit your card</strong>${cardFields(ev)}
     <div class="row"><button class="btn" type="submit">Save card</button><button class="btn ghost" type="button" data-act="editCard">Cancel</button></div></form>`;
   h+=boutTabs(ev,S.sel);
@@ -1039,7 +1268,7 @@ function render(){
   const tabs=$('#tabs');
   if(S.view==='party'&&S.party&&evById(S.party.event_id)){
     const cust=evById(S.party.event_id).is_custom;
-    let list=S.party.solo?[['score','Scorecard'],['global','Global stats']]:[['score','Scorecard'],['pscores','Party scores'],['pstats','Party stats'],['global','Global stats']];
+    let list=S.ptab==='creator'&&S.cp?[['score','Scorecard'],['crowd','Watch-along'],['global','Global stats']]:S.party.solo?[['score','Scorecard'],['global','Global stats']]:[['score','Scorecard'],['pscores','Party scores'],['pstats','Party stats'],['global','Global stats']];
     if(cust)list=list.filter(x=>x[0]!=='global');
     if(S.party.big)list=list.filter(x=>x[0]!=='pscores');
     if(!list.some(t=>t[0]===S.tab))S.tab='score';
@@ -1052,15 +1281,34 @@ document.addEventListener('focusout',()=>setTimeout(()=>{if(deferRender)render()
 
 /* ---------- events ---------- */
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act],[data-tab]');if(!t)return;
-  if(t.dataset.tab){S.tab=t.dataset.tab;S.expand=null;render();window.scrollTo(0,0);if(S.tab==='global')loadGlobal(S.sel);return}
+  if(t.dataset.tab){S.tab=t.dataset.tab;S.expand=null;render();window.scrollTo(0,0);if(S.tab==='global')loadGlobal(S.sel);if(S.tab==='crowd')refreshCp();return}
   const a=t.dataset.act;
-  if(a!=='leave')S.confirmLeave=false;
+  if(a!=='leave'&&a!=='cpLeave')S.confirmLeave=false;
   switch(a){
     case 'home': if(S.party){S.view='party'}else{S.view='home';await loadEvents()}render();break;
-    case 'start': case 'solo': {const p=$('#evPick');if(!p)return;t.disabled=true;await createParty(p.value,a==='solo',{chatOff:!!($('#optChatOff')||{}).checked,big:!!($('#optBig')||{}).checked});t.disabled=false;break}
+    case 'start': case 'solo': {const p=$('#evPick');if(!p)return;t.disabled=true;
+      if(a==='start'&&S.homeCreator&&creatorOn())await createCreator(p.value);else await createParty(p.value,a==='solo',{chatOff:!!($('#optChatOff')||{}).checked});t.disabled=false;break}
+    case 'switchNo': {const was=S.switchAsk;S.switchAsk=null;if(S.party)S.view='party';render();break}
+    case 'switchYes': {const a=S.switchAsk;if(!a)break;S.switchAsk=null;t.disabled=true;
+      if(a.from){unsubscribe();await flushSaves();await sb.from('party_members').delete().eq('party_code',a.from).eq('user_id',S.uid)}
+      if(a.start)await createParty(a.start.eventId,false,{...a.start.opts,force:true});else await enterParty(a.code,false,null,{force:true});
+      if(S.cp)S.ptab='mates';break}
+    case 'ptab': S.ptab=t.dataset.v==='creator'&&S.cp?'creator':'mates';S.addSheet=null;S.confirmLeave=false;
+      if(S.ptab==='creator'){if(S.tab==='pscores'||S.tab==='pstats')S.tab='crowd';refreshCp()}else if(S.tab==='crowd')S.tab='score';render();window.scrollTo(0,0);break;
+    case 'addSheet': S.addSheet=S.addSheet===t.dataset.v?null:t.dataset.v;render();{const i=$(S.addSheet==='watch'?'#cpCode':'#mjCode');if(i)i.focus()}break;
+    case 'addClose': S.addSheet=null;render();break;
+    case 'cpCopy': await cpCopy(t.dataset.v);break;
+    case 'cpHost': S.cpHost=!S.cpHost;S.cpRename=false;S.confirmKick=null;S.confirmReset=false;render();break;
+    case 'cpRename': S.cpRename=true;render();{const i=$('#cpNewName');if(i){i.focus();i.select()}}break;
+    case 'cpRemove': {const id=t.dataset.id;if(S.confirmKick!==id){S.confirmKick=id;render();break}S.confirmKick=null;
+      const {error}=await sb.rpc('uc_panel_remove',{p_code:S.cp.party.code,p_user:id});toast(error?'Couldn’t move them: '+error.message:'Moved to the crowd');await refreshCp();break}
+    case 'cpReset': {if(!S.confirmReset){S.confirmReset=true;render();break}S.confirmReset=false;
+      const {error}=await sb.rpc('uc_panel_key',{p_code:S.cp.party.code,p_reset:true});toast(error?'Couldn’t reset it: '+error.message:'Panel link reset. Copy the new one for your co-hosts.');render();break}
+    case 'cpRefresh': await refreshCp();break;
+    case 'cpLeave': if(!S.confirmLeave){S.confirmLeave=true;render()}else{S.confirmLeave=false;await leaveCreator(false);render();window.scrollTo(0,0)}break;
     case 'inviteHome': S.view='home';S.invite=null;try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}render();window.scrollTo(0,0);break;
-    case 'rejoin': {const c=ls.get('fg_party',null);if(c)await enterParty(c);break}
-    case 'pick': S.sel=t.dataset.key;ls.set('fg_sel',S.sel);S.expand=null;render();if(S.tab==='global')loadGlobal(S.sel);break;
+    case 'rejoin': {const c=ls.get('fg_party',null),rc=ls.get('fg_cparty',null);if(c&&await enterParty(c)){if(rc){await attachCreator(rc);if(S.cp){S.ptab='creator';render()}}}break}
+    case 'pick': S.sel=t.dataset.key;ls.set('fg_sel',S.sel);S.expand=null;render();if(S.tab==='global')loadGlobal(S.sel);if(S.ptab==='creator'&&S.cp)loadCrowd(S.sel).then(render);break;
     case 'score': setScore(+t.dataset.i,t.dataset.c,+t.dataset.v,true);break;
     case 'deduct': {const cur=rawMine(S.sel);const rd=+(t.dataset.rd||0);saveBout(S.sel,[...(cur.r||[])],[...(cur.d||[]),{c:t.dataset.c,rd}]);toast('Point deducted');break}
     case 'undeduct': {const cur=rawMine(S.sel);const vis=myCard(S.sel).d[+t.dataset.j];const d=[...(cur.d||[])];const j=d.indexOf(vis);if(j>=0)d.splice(j,1);saveBout(S.sel,[...(cur.r||[])],d);break}
@@ -1079,10 +1327,9 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
       const res={w:ed.w,how,rd,at:Date.now()};const cur=rawMine(S.sel);S.resEdit=null;
       saveBout(S.sel,[...(cur.r||[])],[...(cur.d||[])],{res});toast(resultText(res,f.bt));break}
     case 'vote': {const cur=rawMine(S.sel);const pr=partyResult(S.sel);if(!pr)break;const v=voteOf(cur,pr)===t.dataset.v?null:t.dataset.v;saveBout(S.sel,[...(cur.r||[])],[...(cur.d||[])],{vote:v,voteFor:resCat(pr)});break}
-    case 'invite': await inviteFriends();break;
+    case 'invite': await inviteFriends();if(S.addSheet==='mates'&&S.party&&!S.party.solo){S.addSheet=null;S.ptab='mates';render()}break;
     case 'editCard': S.editCard=!S.editCard;render();window.scrollTo(0,0);break;
     case 'hostPanel': S.hostPanel=!S.hostPanel;S.confirmKick=null;S.confirmBig=false;render();break;
-    case 'makeBig': if(!S.confirmBig){S.confirmBig=true;render();break}S.confirmBig=false;await updateParty({big:true},'Now a big party');break;
     case 'makeSmall': await updateParty({big:false},'Back to a small party');break;
     case 'kick': {const id=t.dataset.id;if(S.confirmKick!==id){S.confirmKick=id;render();break}S.confirmKick=null;await removeMember(id);break}
     case 'shareCard': await shareCard();break;
@@ -1113,6 +1360,8 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 });
 document.addEventListener('change',e=>{const t=e.target;
   if(t.id==='hpChat'){updateParty({chat_off:t.checked},t.checked?'Chat switched off':'Chat switched on');return}
+  if(t.name==='ptype'){S.homeCreator=t.value==='creator';const w=$('#cpNameWrap');if(w)w.hidden=!S.homeCreator;const co=$('#chatOpt');if(co)co.hidden=S.homeCreator;const b=$('#startBtn');if(b)b.textContent=S.homeCreator?'Start the watch-along':'Start a party';if(S.homeCreator){const n=$('#cpName');if(n)n.focus()}return}
+  if(t.id==='cpWatch'&&S.cp){const watching=!t.checked;sb.from('party_members').update({watching}).eq('party_code',S.cp.party.code).eq('user_id',S.uid).then(({error})=>{if(error)toast('Couldn’t change that: '+error.message);else{toast(watching?'Just watching the crowd':'Your card is on show');refreshCp()}});return}
   if((t.id==='resHow'||t.id==='resRd')&&S.resEdit){S.resEdit[t.id==='resHow'?'how':'rd']=t.id==='resRd'?+t.value:t.value;if(t.id==='resHow')render();return}
   if(t.id==='evPick'){S.homeCustom=t.value==='__custom';const cf=$('#customForm');if(cf)cf.hidden=!S.homeCustom;if(S.homeCustom){const n=$('#cName');if(n)n.focus()}}
   else if(t.id==='cSport'){const h=$('#cHint');const sp=SPORTS[t.value]||SPORTS.boxing;if(h)h.textContent=h.textContent.replace(/Leave the rounds out and .*? rounds are used for [^.]+\./,`Leave the rounds out and ${sp[1]} rounds are used for ${sp[0]}.`)}
@@ -1122,9 +1371,23 @@ document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target
   if(f.id==='chatForm'){const i=$('#chatIn');const v=i.value;if(!v.trim())return;i.value='';if(!(await sendChat('text',v)))i.value=v;return}
   if(f.id==='inviteForm'){const i=$('#inviteNick');const n=(i.value||'').trim().slice(0,30);if(!n){toast('Add your name first');i.focus();return}
     S.nick=n;ls.set('fg_nick',n);const b=f.querySelector('button[type=submit]');if(b){b.disabled=true;b.textContent='Joining…'}
-    if(await enterParty(S.invite.code)){S.invite=null;return}
+    if(await enterParty(S.invite.code,false,S.joinKey)){S.invite=null;S.joinKey=null;return}
     if(b){b.disabled=false;b.textContent='Join party'}S.view='invite';render();return}
   if(f.id==='joinForm'){const c=($('#joinCode').value||'').toUpperCase().replace(/[^A-Z]/g,'');await enterParty(c)}
+  else if(f.id==='cpJoinForm'){const v=($('#cpCode').value||'').trim();const m=/#join-([A-Za-z]{6})(?:~([a-f0-9]{24}))?/.exec(v);const code=(m?m[1]:v).toUpperCase().replace(/[^A-Z]/g,'');const key=m&&m[2]||null;
+    if(code.length!==6){toast('Codes are 6 letters');return}
+    const {data:p}=await sb.from('parties').select('*').eq('code',code).maybeSingle();
+    if(!p){toast('No watch-along found with code '+code);return}
+    if(!isCreator(p)){toast('That’s a mates party code. Use “Join” on the home screen, or ask for the watch-along code.');return}
+    if(S.party&&p.event_id!==S.party.event_id){toast('That watch-along is for a different fight night');return}
+    await joinCreator(p,key,false)}
+  else if(f.id==='mjForm'){const c=($('#mjCode').value||'').toUpperCase().replace(/[^A-Z]/g,'');if(c.length!==6){toast('Party codes are 6 letters');return}
+    const {data:p}=await sb.from('parties').select('*').eq('code',c).maybeSingle();if(p&&isCreator(p)){toast('That’s a watch-along code, not a mates party');return}
+    if(p&&S.party&&p.event_id!==S.party.event_id){toast('That party is for a different fight night');return}
+    if(await enterParty(c,false,null,{keepTab:true})){S.ptab='mates';render()}}
+  else if(f.id==='cpRenameForm'){const n=($('#cpNewName').value||'').trim().slice(0,40);if(!n){toast('Give it a name');return}
+    const {error}=await sb.from('parties').update({name:n}).eq('code',S.cp.party.code);if(error){toast('Couldn’t rename it: '+error.message);return}
+    S.cp.party={...S.cp.party,name:n};S.cpRename=false;toast('Renamed to '+n);render()}
   else if(f.id==='adminLogin'){await checkAdmin($('#adminPw').value,false);render()}
   else if(f.id==='evForm')await saveEvent();
   else if(f.id==='cardEditForm'){const ev=evById(S.party&&S.party.event_id);if(!ev)return;const saved=await saveCustomCard(ev.id);if(!saved)return;
@@ -1145,12 +1408,13 @@ async function saveEvent(){const name=$('#aName').value.trim(),dt=$('#aDate').va
 
 /* ---------- start ---------- */
 setInterval(()=>{if(S.view==='party'&&S.tab==='global'&&!document.hidden)loadGlobal(S.sel,true)},30000);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)flushSaves();else if(S.party){loadPartyScores().then(render);loadMembers();loadChat().then(()=>renderChat())}});
+setInterval(()=>{if(S.view==='party'&&S.cp&&S.ptab==='creator'&&!document.hidden){const ae=document.activeElement;if(ae&&['INPUT','SELECT','TEXTAREA'].includes(ae.tagName))return;refreshCp()}},15000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushSaves();else if(S.party){loadPartyScores().then(render);loadMembers();loadChat().then(()=>renderChat());if(S.cp)refreshCp()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&S.chat.open)closeChat()});
 window.addEventListener('pagehide',()=>{flushSaves()});
 
 async function init(){render();if(!configured)return;
-  if(CONFIG.mode!=='claude'&&'serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'))/* app files not uploaded yet: service worker off */
+  /* service worker: switched on with the Google Play release */
   if(!window.supabase||!window.supabase.createClient){S.err='Could not load the app’s database library. Check your internet connection and reload.';render();return}
   sb=window.supabase.createClient(CONFIG.url,CONFIG.key,{auth:{persistSession:true,autoRefreshToken:true}});
   try{let {data:{session}}=await sb.auth.getSession();
@@ -1160,10 +1424,12 @@ async function init(){render();if(!configured)return;
     S.uid=session.user.id}
   catch(err){S.err='Couldn’t reach the database. Check the URL and key in CONFIG.';render();return}
   await loadEvents();S.ready=true;
-  const m=/^#join-([A-Za-z]{6})$/.exec(location.hash);
-  if(m){S.joinPrefill=m[1].toUpperCase();if(S.nick){if(await enterParty(S.joinPrefill))return}
+  const m=/^#join-([A-Za-z]{6})(?:~([a-f0-9]{24}))?$/.exec(location.hash);
+  const rj=ls.get('fg_party',null),rc=ls.get('fg_cparty',null);
+  if(m){S.joinPrefill=m[1].toUpperCase();S.joinKey=m[2]||null;
+    if(S.nick){if(rj){await enterParty(rj,true);if(rc&&S.party)await attachCreator(rc)}if(await enterParty(S.joinPrefill,false,S.joinKey)){S.joinKey=null;return}}
     else{await loadInvite(S.joinPrefill);S.view='invite'}}
-  else{const rj=ls.get('fg_party',null);if(rj&&S.nick){if(await enterParty(rj,true))return}}
+  else if(rj&&S.nick){if(await enterParty(rj,true)){if(rc)await attachCreator(rc);if(S.cp)S.ptab='creator';render();return}}
   render()}
 init();
 })();
