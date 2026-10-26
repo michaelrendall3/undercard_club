@@ -1305,7 +1305,9 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     case 'cpReset': {if(!S.confirmReset){S.confirmReset=true;render();break}S.confirmReset=false;
       const {error}=await sb.rpc('uc_panel_key',{p_code:S.cp.party.code,p_reset:true});toast(error?'Couldn’t reset it: '+error.message:'Panel link reset. Copy the new one for your co-hosts.');render();break}
     case 'cpRefresh': await refreshCp();break;
-    case 'cpLeave': if(!S.confirmLeave){S.confirmLeave=true;render()}else{S.confirmLeave=false;await leaveCreator(false);render();window.scrollTo(0,0)}break;
+    case 'cpLeave': if(!S.confirmLeave){S.confirmLeave=true;render()}else{S.confirmLeave=false;const nm=cpName(S.cp&&S.cp.party);await leaveCreator(true);
+      // only following the watch-along (no mates party)? Go back to the home screen. Otherwise stay with your mates.
+      if(S.party&&S.party.solo)await leaveParty();else render();toast('You’ve left '+nm);window.scrollTo(0,0)}break;
     case 'inviteHome': S.view='home';S.invite=null;try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}render();window.scrollTo(0,0);break;
     case 'rejoin': {const c=ls.get('fg_party',null),rc=ls.get('fg_cparty',null);if(c&&await enterParty(c)){if(rc){await attachCreator(rc);if(S.cp){S.ptab='creator';render()}}}break}
     case 'pick': S.sel=t.dataset.key;ls.set('fg_sel',S.sel);S.expand=null;render();if(S.tab==='global')loadGlobal(S.sel);if(S.ptab==='creator'&&S.cp)loadCrowd(S.sel).then(render);break;
