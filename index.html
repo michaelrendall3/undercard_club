@@ -442,7 +442,10 @@ const lastN=n=>String(n||'').split(' ').pop();
 const full=x=>Array.isArray(x)&&typeof x[0]==='number'&&typeof x[1]==='number';
 const evById=id=>S.events.find(e=>e.id===id)||null;
 function findBout(key){if(!key)return null;const i=key.indexOf('__');if(i<0)return null;const ev=evById(key.slice(0,i));if(!ev)return null;
-  const bt=(ev.bouts||[]).find(x=>x.id===key.slice(i+2));return bt?{ev,bt,key}:null}
+  const bt=(ev.bouts||[]).find(x=>x.id===key.slice(i+2));if(!bt)return null;
+  // If the result says it went the distance in fewer rounds than scheduled (e.g. a 6-rounder set up as 10),
+  // treat the bout as that many rounds everywhere. bt.sched keeps the scheduled number for the result form.
+  const dr=distOf(partyResult(key));return{ev,bt:dr&&dr<bt.rounds?{...bt,rounds:dr,sched:bt.rounds}:bt,key}}
 function status(ev){const t=Date.parse(ev.starts_at);if(!t)return'';const now=Date.now();
   if(now>=t&&now<t+6*36e5)return'live';if(now<t)return t-now<7*864e5?'soon':'upcoming';return now<t+3*864e5?'recent':'past'}   // 'recent': kept for 3 days so people can score the replay
 function fmtDate(iso){const d=new Date(iso);if(isNaN(d))return'';return d.toLocaleString(undefined,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
@@ -458,7 +461,9 @@ const endText=(e,bt,short)=>e.w==='nc'?`No contest · round ${e.rd}`:`${short?la
    ended = {res:{w:'r'|'b'|'d'|'nc', how, rd, at}, pick:'rko'|'rdec'|'bko'|'bdec', pickAt, vote:'fair'|'rob', rd,w,how (legacy, stoppages only)} */
 const STOP=['ko','tko','rtd','dq','sub','other'];           // fight ends in a round
 const STOP_KO=['ko','tko','rtd','sub','other'];             // counts as "by KO / by finish" for picks (DQ doesn't)
-const DEC=['ud','sd','md'], DRAWS=['dud','dsd','dmd'];
+const DEC=['ud','sd','md'], DRAWS=['dud','dsd','dmd'], DIST=[...DEC,...DRAWS];
+// rounds a decision/draw actually went, when the result says it was shorter than scheduled (otherwise null = full distance)
+const distOf=res=>res&&res.rd&&DIST.includes(res.how)?res.rd:null;
 Object.assign(HOW,{ud:'UD',sd:'SD',md:'MD',dud:'Unanimous draw',dsd:'Split draw',dmd:'Majority draw'});
 Object.assign(HOW_LONG,{ud:'UD (unanimous decision)',sd:'SD (split decision)',md:'MD (majority decision)',dud:'Unanimous draw',dsd:'Split draw',dmd:'Majority draw'});
 const finishSport=ev=>['mma','other'].includes(sportKey(ev));
@@ -486,14 +491,14 @@ function partyResult(key){const host=S.party&&S.party.host;const ids=new Set([S.
 const canSetResult=key=>{const pr=partyResult(key);return !pr||!S.party||S.party.solo||S.party.host===S.uid||pr.by===S.uid};
 function resultText(res,bt,short){if(!res)return'';const nm=c=>short?lastN(c==='r'?bt.red:bt.blue):(c==='r'?bt.red:bt.blue);
   if(res.w==='nc')return 'No contest'+(res.rd?' · round '+res.rd:'');
-  if(res.w==='d')return res.how?HOW[res.how]:'Draw';
+  if(res.w==='d')return (res.how?HOW[res.how]:'Draw')+(distOf(res)?' · '+res.rd+' rounds':'');
   const how=res.how?(DEC.includes(res.how)?' by '+{ud:'unanimous decision',sd:'split decision',md:'majority decision'}[res.how]:' by '+HOW[res.how]):'';
-  return nm(res.w)+' wins'+how+(stopOf(res)&&res.rd?' · round '+res.rd:'')}
+  return nm(res.w)+' wins'+how+(stopOf(res)&&res.rd?' · round '+res.rd:distOf(res)?' · '+res.rd+' rounds':'')}
 const pickText=(p,bt,ev,short)=>p?`${short?lastN(p[0]==='r'?bt.red:bt.blue):lastN(p[0]==='r'?bt.red:bt.blue)} by ${p.slice(1)==='ko'?koWord(ev):'decision'}`:'';
 function pickScore(p,res){if(!p||!res||res.w==='nc')return null;const fighter=(res.w==='r'||res.w==='b')&&p[0]===res.w;
   const cat=STOP_KO.includes(res.how)?'ko':DEC.includes(res.how)?'dec':null;return{fighter,method:fighter&&!!cat&&cat===p.slice(1)}}
-function cardOf(uid,key){const c=rawCard(uid,key);const e=stopOf(partyResult(key));let r=(c&&Array.isArray(c.r))?c.r:[],d=(c&&Array.isArray(c.d))?c.d:[];
-  if(e){r=r.slice(0,e.rd);d=d.filter(p=>p.rd<e.rd)}return{r,d,e,pick:c&&c.pick||null,vote:c&&c.vote||null}}
+function cardOf(uid,key){const c=rawCard(uid,key);const pr=partyResult(key);const e=stopOf(pr);let r=(c&&Array.isArray(c.r))?c.r:[],d=(c&&Array.isArray(c.d))?c.d:[];
+  const cut=e?e.rd:distOf(pr);if(cut){r=r.slice(0,cut);d=d.filter(p=>p.rd<cut)}return{r,d,e,pick:c&&c.pick||null,vote:c&&c.vote||null}}
 const myCard=key=>cardOf(S.uid,key);
 const hasScored=key=>(rawMine(key).r||[]).some(Boolean);
 const picksVisible=key=>!!rawMine(key).pick||hasScored(key)||!!partyResult(key);
@@ -1056,13 +1061,17 @@ function vResult(f){const {bt,key,ev}=f;const pr=partyResult(key);const ed=S.res
     if(w){const opts=w==='d'?DRAWS:w==='nc'?[]:(finishSport(ev)?['tko','sub','dq','other']:['ko','tko','rtd','dq']).concat(DEC);
       const how=ed.how&&(opts.includes(ed.how))?ed.how:opts[0];const lbl=k=>finishSport(ev)&&k==='tko'?'KO / TKO':HOW_LONG[k];
       if(opts.length)h+=`<select id="resHow" aria-label="How">${opts.map(k=>`<option value="${k}"${k===how?' selected':''}>${esc(lbl(k))}</option>`).join('')}</select>`;
-      if(w==='nc'||STOP.includes(how))h+=`<select id="resRd" aria-label="Round">${Array.from({length:bt.rounds},(_,i)=>`<option value="${i+1}"${i+1===(ed.rd||1)?' selected':''}>Round ${i+1}</option>`).join('')}</select>`;
+      const sched=bt.sched||bt.rounds;
+      if(w==='nc'||STOP.includes(how))h+=`<select id="resRd" aria-label="Round">${Array.from({length:sched},(_,i)=>`<option value="${i+1}"${i+1===(ed.rd||1)?' selected':''}>Round ${i+1}</option>`).join('')}</select>`;
+      else if(DIST.includes(how)){const scored=(rawMine(key).r||[]).filter(full).length;
+        const def=ed.rdSet&&ed.rd?ed.rd:(pr&&DIST.includes(pr.how)?(pr.rd||sched):(scored&&scored<sched?scored:sched));
+        h+=`<label class="small muted" for="resRd" style="display:block;margin:6px 12px 2px">Went to the scorecards after</label><select id="resRd" aria-label="Rounds it went">${Array.from({length:sched},(_,i)=>`<option value="${i+1}"${i+1===def?' selected':''}>${i+1} round${i?'s':''}${i+1===sched?' (full distance)':''}</option>`).join('')}</select>`}
       h+=`<div class="dedform"><button type="button" class="btn red" data-act="resSave" style="grid-column:1 / -1">Save result</button>${pr?'<button type="button" class="btn ghost" data-act="resCancel" style="grid-column:1 / -1">Cancel</button>':''}</div>`}
     return h+`</div>`}
   const col=pr.w==='r'?'var(--red)':pr.w==='b'?'var(--blue)':'var(--ink)';
   const who=solo?'':pr.by===S.uid?(pr.byHost?'Entered by you (host)':'Entered by you'):(pr.byHost?'Entered by the host':'Entered by '+esc(memberName(pr.by)));
   h+=`<p class="resline" style="color:${col}">${esc(resultText(pr,bt))}</p>
-    <p class="small muted" style="margin:0 12px 10px">${who}${!solo&&!canSetResult(key)?' · only the host can change it':''}${stopOf(pr)?(who?' · rounds after that are hidden':'Rounds after that are hidden'):''}</p>`;
+    <p class="small muted" style="margin:0 12px 10px">${who}${!solo&&!canSetResult(key)?' · only the host can change it':''}${stopOf(pr)||distOf(pr)?(who?' · rounds after that are hidden':'Rounds after that are hidden'):''}</p>`;
   if(canSetResult(key))h+=`<div class="dedform" style="margin-top:-4px"><button type="button" class="btn ghost" data-act="resEdit" style="grid-column:1 / -1">${!solo&&host&&pr.by!==S.uid?'Correct the result':'Change the result'}</button></div>`;
   if(pr.w!=='nc'){const st=STOP_KO.includes(pr.how);const mine=voteOf(rawMine(key),pr);
     h+=`<div class="ded-h" style="padding-top:4px">${st?'Fair stoppage?':'Fair or robbery?'}</div>
@@ -1395,13 +1404,14 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
       const f=findBout(key);saveBout(key,[...(cur.r||[])],[...(cur.d||[])],{pick:t.dataset.p,pickAt:Date.now()});if(f)toast('Locked in: '+pickText(t.dataset.p,f.bt,f.ev));break}
     case 'resW': {const pr=partyResult(S.sel);const ed=S.resEdit&&S.resEdit.key===S.sel?S.resEdit:{key:S.sel,rd:null,how:null};const f=findBout(S.sel);const w=t.dataset.w;
       const sameSide=ed.w&&((ed.w==='d')===(w==='d'))&&ed.w!=='nc'&&w!=='nc';
-      S.resEdit={...ed,w,how:sameSide?ed.how:(w==='d'?'dsd':w==='nc'?null:'ud'),rd:ed.rd||(pr&&pr.rd)||Math.max(1,Math.min(rawMine(S.sel).r.length||1,f?f.bt.rounds:1))};render();break}
+      S.resEdit={...ed,w,how:sameSide?ed.how:(w==='d'?'dsd':w==='nc'?null:'ud'),rd:ed.rd||(pr&&pr.rd)||Math.max(1,Math.min(rawMine(S.sel).r.length||1,f?(f.bt.sched||f.bt.rounds):1))};render();break}
     case 'resEdit': {const pr=partyResult(S.sel);S.resEdit={key:S.sel,w:pr?pr.w:null,how:pr?pr.how:null,rd:pr?pr.rd:null};render();break}
     case 'resCancel': S.resEdit=null;render();break;
     case 'dedToggle': S.dedOpen=S.dedOpen===S.sel?null:S.sel;render();break;
     case 'resSave': {const ed=S.resEdit;const f=findBout(S.sel);if(!ed||!ed.w||!f||!canSetResult(S.sel))break;
-      const how=ed.w==='nc'?null:(($('#resHow')||{}).value||ed.how);const needRd=ed.w==='nc'||STOP.includes(how);
-      const rd=needRd?Math.max(1,Math.min(+(($('#resRd')||{}).value||ed.rd||1),f.bt.rounds)):null;
+      const how=ed.w==='nc'?null:(($('#resHow')||{}).value||ed.how);const sched=f.bt.sched||f.bt.rounds;const needRd=ed.w==='nc'||STOP.includes(how);
+      let rd=needRd?Math.max(1,Math.min(+(($('#resRd')||{}).value||ed.rd||1),sched)):null;
+      if(DIST.includes(how)){const v=+(($('#resRd')||{}).value||sched);rd=v>=1&&v<sched?v:null}   // null = went the full scheduled distance
       const res={w:ed.w,how,rd,at:Date.now()};const cur=rawMine(S.sel);S.resEdit=null;
       saveBout(S.sel,[...(cur.r||[])],[...(cur.d||[])],{res});toast(resultText(res,f.bt));break}
     case 'vote': {const cur=rawMine(S.sel);const pr=partyResult(S.sel);if(!pr)break;const v=voteOf(cur,pr)===t.dataset.v?null:t.dataset.v;saveBout(S.sel,[...(cur.r||[])],[...(cur.d||[])],{vote:v,voteFor:resCat(pr)});break}
@@ -1441,7 +1451,7 @@ document.addEventListener('change',e=>{const t=e.target;
   if(t.id==='hpChat'){updateParty({chat_off:t.checked},t.checked?'Chat switched off':'Chat switched on');return}
   if(t.name==='ptype'){S.homeCreator=t.value==='creator';const w=$('#cpNameWrap');if(w)w.hidden=!S.homeCreator;const b=$('#startBtn');if(b)b.textContent=S.homeCreator?'Start the watch-along':'Start a party';if(S.homeCreator){const n=$('#cpName');if(n)n.focus()}return}
   if(t.id==='cpWatch'&&S.cp){const watching=!t.checked;sb.from('party_members').update({watching}).eq('party_code',S.cp.party.code).eq('user_id',S.uid).then(({error})=>{if(error)toast('Couldn’t change that: '+error.message);else{toast(watching?'Just watching the crowd':'Your card is on show');refreshCp()}});return}
-  if((t.id==='resHow'||t.id==='resRd')&&S.resEdit){S.resEdit[t.id==='resHow'?'how':'rd']=t.id==='resRd'?+t.value:t.value;if(t.id==='resHow')render();return}
+  if((t.id==='resHow'||t.id==='resRd')&&S.resEdit){S.resEdit[t.id==='resHow'?'how':'rd']=t.id==='resRd'?+t.value:t.value;if(t.id==='resRd')S.resEdit.rdSet=true;if(t.id==='resHow')render();return}
   if(t.id==='evPick'){S.homeCustom=t.value==='__custom';const cf=$('#customForm');if(cf)cf.hidden=!S.homeCustom;if(S.homeCustom){const n=$('#cName');if(n)n.focus()}}
   else if(t.id==='cSport'){const h=$('#cHint');const sp=SPORTS[t.value]||SPORTS.boxing;if(h)h.textContent=h.textContent.replace(/Leave the rounds out and .*? rounds are used for [^.]+\./,`Leave the rounds out and ${sp[1]} rounds are used for ${sp[0]}.`)}
   else if(t.id==='nick'){S.nick=t.value.trim().slice(0,30);ls.set('fg_nick',S.nick);$('#who').innerHTML=S.nick?('<span class="sa">Scoring as </span>'+esc(S.nick)):''}
